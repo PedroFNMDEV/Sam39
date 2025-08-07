@@ -907,6 +907,13 @@ const Dashboard: React.FC = () => {
               </div>
               <span className="text-sm text-gray-700 text-center">Relay RTMP</span>
             </Link>
+
+            <Link to="/dashboard/conversao-videos" className="flex flex-col items-center justify-center p-3 hover:bg-gray-50 rounded-lg transition-colors">
+              <div className="w-12 h-12 flex items-center justify-center bg-purple-100 text-purple-600 rounded-full mb-2">
+                <Settings className="h-6 w-6" />
+              </div>
+              <span className="text-sm text-gray-700 text-center">Conversão Vídeos</span>
+            </Link>
           </div>
         </div>
       </div>

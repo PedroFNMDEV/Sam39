@@ -50,7 +50,8 @@ class WowzaStreamingService {
                 `SELECT 
                     codigo,
                     nome,
-                    ip, 
+                    ip,
+                    dominio,
                     senha_root,
                     porta_ssh,
                     limite_streamings,
@@ -66,13 +67,15 @@ class WowzaStreamingService {
             if (serverRows.length > 0) {
                 const server = serverRows[0];
                 this.serverId = server.codigo;
-                this.wowzaHost = server.ip;
+                this.wowzaHost = server.dominio || server.ip; // Priorizar domínio
                 this.wowzaPort = 6980; // Porta da API REST do Wowza
                 this.wowzaUser = 'admin'; // Usuário padrão da API
                 this.wowzaPassword = 'FK38Ca2SuE6jvJXed97VMn'; // Senha correta do Wowza
                 this.serverInfo = {
                     id: server.codigo,
                     nome: server.nome,
+                    dominio: server.dominio,
+                    ip: server.ip,
                     limite_streamings: server.limite_streamings,
                     streamings_ativas: server.streamings_ativas,
                     load_cpu: server.load_cpu,
@@ -82,7 +85,7 @@ class WowzaStreamingService {
                 this.baseUrl = `http://${this.wowzaHost}:${this.wowzaPort}/v2/servers/_defaultServer_/vhosts/_defaultVHost_`;
                 this.client = new DigestFetch(this.wowzaUser, this.wowzaPassword);
                 
-                console.log(`Wowza inicializado: ${server.nome} (${server.ip})`);
+                console.log(`Wowza inicializado: ${server.nome} (${server.dominio || server.ip})`);
                 
                 // Testar conexão
                 try {
@@ -355,27 +358,21 @@ class WowzaStreamingService {
 
     // Construir URL correta para vídeos VOD
     buildVideoUrl(userLogin, folderName, fileName) {
-        // Verificar se precisa converter para MP4
-        const fileExtension = path.extname(fileName).toLowerCase();
-        const needsConversion = !['.mp4'].includes(fileExtension);
-        
-        // Nome do arquivo final (MP4)
-        const finalFileName = needsConversion ? 
-            fileName.replace(/\.[^/.]+$/, '.mp4') : fileName;
+        // Sempre usar MP4 após conversão
+        const finalFileName = fileName.endsWith('.mp4') ? fileName : fileName.replace(/\.[^/.]+$/, '.mp4');
         
         // Construir caminho correto para o Wowza
         const streamPath = `${userLogin}/${folderName}/${finalFileName}`;
         
         // Para VOD, usar URLs diretas com autenticação
-        const isProduction = process.env.NODE_ENV === 'production';
-        const wowzaHost = isProduction ? 'samhost.wcore.com.br' : this.wowzaHost;
+        const wowzaHost = this.wowzaHost; // Usar host configurado (domínio ou IP)
         const wowzaUser = 'admin';
         const wowzaPassword = 'FK38Ca2SuE6jvJXed97VMn';
         
         return {
-            hlsUrl: `http://${wowzaHost}:1935/vod/_definst_/mp4:${streamPath}/playlist.m3u8`,
+            mp4Url: `http://${wowzaUser}:${wowzaPassword}@${wowzaHost}:6980/content/${streamPath}`,
             rtmpUrl: `rtmp://${wowzaHost}:1935/vod/${streamPath}`,
-            directUrl: `http://${wowzaUser}:${wowzaPassword}@${wowzaHost}:6980/content/${streamPath}`,
+            hlsUrl: `http://${wowzaHost}:1935/vod/_definst_/mp4:${streamPath}/playlist.m3u8`,
             proxyUrl: `/content/${streamPath}`
         };
     }

@@ -59,12 +59,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ playlistVideo, onVideoEnd }) 
       return url;
     }
     
-    // Para vídeos SSH, usar a URL diretamente
-    if (url.includes('/api/videos-ssh/')) {
-      return url;
-    }
-    
-    // Para arquivos locais, sempre usar o proxy /content do backend
+    // Todos os vídeos agora são MP4, usar proxy /content do backend
     const cleanPath = url.replace(/^\/+/, '');
     return `/content/${cleanPath}`;
   };

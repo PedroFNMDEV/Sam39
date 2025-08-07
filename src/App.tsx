@@ -19,6 +19,7 @@ import DownloadYoutube from './pages/dashboard/DownloadYoutube';
 import MigrarVideosFTP from './pages/dashboard/MigrarVideosFTP';
 import Espectadores from './pages/dashboard/Espectadores';
 import RelayRTMP from './pages/dashboard/RelayRTMP';
+import ConversaoVideos from './pages/dashboard/ConversaoVideos';
 
 // Layouts
 import AuthLayout from './layouts/AuthLayout';
@@ -69,6 +70,7 @@ function App() {
               <Route path="migrar-videos-ftp" element={<MigrarVideosFTP />} />
               <Route path="espectadores" element={<Espectadores />} />
               <Route path="relayrtmp" element={<RelayRTMP />} />
+              <Route path="conversao-videos" element={<ConversaoVideos />} />
             </Route>
 
             {/* Fallback route */}

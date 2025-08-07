@@ -80,42 +80,41 @@ class VideoSSHManager {
                 const relativePath = fullPath.replace(`/usr/local/WowzaStreamingEngine/content/${userLogin}/`, '');
                 const folderPath = path.dirname(relativePath);
                 
-                // Extrair duração do vídeo (se possível via ffprobe)
+                // Extrair duração e bitrate do vídeo via ffprobe
                 let duration = 0;
+                let videoBitrate = 0;
+                let videoFormat = fileExtension.substring(1);
                 try {
-                    const durationCommand = `ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${fullPath}" 2>/dev/null || echo "0"`;
-                    const durationResult = await SSHManager.executeCommand(serverId, durationCommand);
-                    duration = Math.floor(parseFloat(durationResult.stdout.trim()) || 0);
+                    const probeCommand = `ffprobe -v quiet -print_format json -show_format -show_streams "${fullPath}" 2>/dev/null || echo "NO_PROBE"`;
+                    const probeResult = await SSHManager.executeCommand(serverId, probeCommand);
+                    
+                    if (!probeResult.stdout.includes('NO_PROBE')) {
+                        const probeData = JSON.parse(probeResult.stdout);
+                        
+                        if (probeData.format) {
+                            duration = Math.floor(parseFloat(probeData.format.duration) || 0);
+                            videoBitrate = Math.floor(parseInt(probeData.format.bit_rate) / 1000) || 0;
+                        }
+                        
+                        if (probeData.streams) {
+                            const videoStream = probeData.streams.find(s => s.codec_type === 'video');
+                            if (videoStream && videoStream.codec_name) {
+                                videoFormat = videoStream.codec_name;
+                            }
+                        }
+                    }
                 } catch (error) {
-                    console.warn(`Não foi possível obter duração de ${fileName}`);
+                    console.warn(`Não foi possível obter informações de ${fileName}`);
                 }
 
-                // Verificar se precisa converter para MP4
-                const fileExtension = path.extname(fileName).toLowerCase();
-                const needsConversion = !['.mp4'].includes(fileExtension);
+                // Verificar se é MP4 e se bitrate está dentro do limite
+                const isMP4 = fileExtension === '.mp4';
+                const userBitrateLimit = 2500; // Será obtido do contexto do usuário
+                const needsConversion = !isMP4 || (videoBitrate > 0 && videoBitrate > userBitrateLimit);
                 
-                // Nome do arquivo MP4 convertido
-                const mp4FileName = needsConversion ? 
-                    fileName.replace(/\.[^/.]+$/, '.mp4') : fileName;
-                
-                // Caminho do arquivo MP4 (convertido ou original)
-                const mp4Path = needsConversion ? 
-                    fullPath.replace(/\.[^/.]+$/, '.mp4') : fullPath;
-                
-                // Se precisa converter, fazer a conversão
-                if (needsConversion) {
-                    await this.convertVideoToMp4(serverId, fullPath, mp4Path);
-                }
-                
-                // Construir URL HLS correta para o Wowza
-                const isProduction = process.env.NODE_ENV === 'production';
-                const wowzaHost = isProduction ? 'samhost.wcore.com.br' : '51.222.156.223';
-                
-                // Construir caminho relativo para o Wowza (sem a pasta content)
-                const relativeMp4Path = mp4Path.replace('/usr/local/WowzaStreamingEngine/content/', '');
-                
-                // URL HLS correta com formato Wowza: /vod/_definst_/mp4:caminho/playlist.m3u8
-                const hlsUrl = `http://${wowzaHost}:1935/vod/_definst_/mp4:${relativeMp4Path.replace(/^\/+/, '')}/playlist.m3u8`;
+                // Nome do arquivo MP4 (sempre MP4 após conversão)
+                const mp4FileName = fileName.replace(/\.[^/.]+$/, '.mp4');
+                const mp4Path = fullPath.replace(/\.[^/.]+$/, '.mp4');
                 
                 videos.push({
                     id: Buffer.from(fullPath).toString('base64'), // ID único baseado no caminho
@@ -124,8 +123,11 @@ class VideoSSHManager {
                     fullPath: fullPath,
                     mp4Path: mp4Path,
                     mp4FileName: mp4FileName,
-                    needsConversion: needsConversion,
-                    converted: needsConversion ? await this.checkFileExists(serverId, mp4Path) : true,
+                    is_mp4: isMP4,
+                    needs_conversion: needsConversion,
+                    bitrate_video: videoBitrate,
+                    formato_original: videoFormat,
+                    can_use: !needsConversion,
                     folder: folderPath === '.' ? 'root' : folderPath,
                     size: size,
                     duration: duration,
@@ -133,9 +135,9 @@ class VideoSSHManager {
                     lastModified: new Date().toISOString(), // Seria melhor extrair do ls
                     serverId: serverId,
                     userLogin: userLogin,
-                    hlsUrl: hlsUrl,
-                    vodUrl: `http://${wowzaHost}:6980/content/${relativeMp4Path}`,
-                    originalFormat: fileExtension
+                    mp4Url: `/content/${userLogin}/${folderPath}/${mp4FileName}`,
+                    originalFormat: fileExtension,
+                    user_bitrate_limit: userBitrateLimit
                 });
             }
 
@@ -173,14 +175,17 @@ class VideoSSHManager {
                         await db.execute(
                             `INSERT INTO playlists_videos (
                                 codigo_playlist, path_video, video, width, height,
-                                bitrate, duracao, duracao_segundos, tipo, ordem, tamanho_arquivo
-                            ) VALUES (0, ?, ?, 1920, 1080, 2500, ?, ?, 'video', 0, ?)`,
+                                bitrate, duracao, duracao_segundos, tipo, ordem, tamanho_arquivo,
+                                bitrate_video, formato_original
+                            ) VALUES (0, ?, ?, 1920, 1080, 2500, ?, ?, 'video', 0, ?, ?, ?)`,
                             [
                                 video.fullPath,
                                 video.nome,
                                 duracao,
                                 video.duration,
-                                video.size
+                                video.size,
+                                video.bitrate_video || 0,
+                                video.formato_original || 'unknown'
                             ]
                         );
                         

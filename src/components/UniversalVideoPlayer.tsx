@@ -115,9 +115,9 @@ const UniversalVideoPlayer: React.FC<UniversalVideoPlayerProps> = ({
   };
   // Função para detectar tipo de arquivo
   const getFileType = (url: string) => {
-    // Para URLs SSH, sempre tratar como vídeo regular
+    // Para URLs SSH, sempre tratar como MP4
     if (url.includes('/api/videos-ssh/')) {
-      return 'video';
+      return 'mp4';
     }
     
     const extension = url.split('.').pop()?.toLowerCase();
@@ -144,9 +144,9 @@ const UniversalVideoPlayer: React.FC<UniversalVideoPlayerProps> = ({
       case '.mpeg':
       case '.m4v':
       case '.asf':
-        return 'video';
+        return 'mp4'; // Todos os vídeos são tratados como MP4 após conversão
       default:
-        return 'video'; // Default para vídeo em vez de unknown
+        return 'mp4'; // Default para MP4
     }
   };
 
@@ -415,7 +415,7 @@ const UniversalVideoPlayer: React.FC<UniversalVideoPlayerProps> = ({
       }
     } else {
       // Vídeo regular (MP4, WebM, etc.)
-      console.log(`📹 Carregando vídeo ${fileType.toUpperCase()}${src.includes('/api/videos-ssh/') ? ' (SSH Otimizado)' : ''}`);
+      console.log(`📹 Carregando vídeo MP4${src.includes('/api/videos-ssh/') ? ' (SSH Otimizado)' : ''}`);
 
       // Para vídeos SSH, configurar timeout maior
       if (src && src.includes('/api/videos-ssh/')) {

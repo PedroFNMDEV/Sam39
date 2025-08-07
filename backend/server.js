@@ -22,6 +22,7 @@
   const serversRoutes = require('./routes/servers');
  const playersRoutes = require('./routes/players');
  const videosSSHRoutes = require('./routes/videos-ssh');
+ const conversionRoutes = require('./routes/conversion');
 
   const app = express();
   const PORT = process.env.PORT || 3001;
@@ -264,6 +265,7 @@
  app.use('/api/players', playersRoutes);
  app.use('/api/videos-ssh', videosSSHRoutes);
  app.use('/api/user-settings', require('./routes/user-settings'));
+ app.use('/api/conversion', conversionRoutes);
 
   // Rota de teste
   app.get('/api/test', (req, res) => {

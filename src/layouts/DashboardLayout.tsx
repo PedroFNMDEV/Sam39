@@ -35,7 +35,8 @@ const DashboardLayout: React.FC = () => {
     { id: 'migrar-videos-ftp', label: 'Migrar FTP', path: '/dashboard/migrar-videos-ftp', icon: 'Server', visible: true, order: 9, category: 'content' },
     { id: 'espectadores', label: 'Espectadores', path: '/dashboard/espectadores', icon: 'Users', visible: true, order: 10, category: 'analytics' },
     { id: 'relayrtmp', label: 'Relay RTMP', path: '/dashboard/relayrtmp', icon: 'ArrowLeftRight', visible: true, order: 11, category: 'streaming' },
-    { id: 'configuracoes', label: 'Configurações', path: '/dashboard/configuracoes', icon: 'Settings', visible: true, order: 12, category: 'system' },
+    { id: 'conversao-videos', label: 'Conversão de Vídeos', path: '/dashboard/conversao-videos', icon: 'Settings', visible: true, order: 12, category: 'content' },
+    { id: 'configuracoes', label: 'Configurações', path: '/dashboard/configuracoes', icon: 'Settings', visible: true, order: 13, category: 'system' },
   ];
 
   useEffect(() => {
