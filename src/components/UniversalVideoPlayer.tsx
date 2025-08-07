@@ -90,17 +90,14 @@ const UniversalVideoPlayer: React.FC<UniversalVideoPlayerProps> = ({
       return src;
     }
 
-    // Para vídeos SSH, usar a URL diretamente com token
+    // Para vídeos SSH, usar a URL diretamente (não adicionar /content)
     if (src.includes('/api/videos-ssh/')) {
-      const token = localStorage.getItem('auth_token');
-      return token ? `${src}${src.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : src;
+      return src;
     }
 
     // Para vídeos locais, sempre usar o proxy /content do backend
     const cleanPath = src.replace(/^\/+/, ''); // Remove barras iniciais
-    const token = localStorage.getItem('auth_token');
-    const baseUrl = `/content/${cleanPath}`;
-    return token ? `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}auth_token=${encodeURIComponent(token)}` : baseUrl;
+    return `/content/${cleanPath}`;
   };
 
   // Função para otimizar URL de vídeo SSH
@@ -369,7 +366,18 @@ const UniversalVideoPlayer: React.FC<UniversalVideoPlayerProps> = ({
           console.error('HLS Error:', data);
           if (data.fatal) {
             setIsLoading(false);
-            let errorMsg = `Erro no stream: ${data.details || 'Erro desconhecido'}`;
+            let errorMsg = 'Erro ao carregar stream';
+
+            if (data.details?.includes('404')) {
+              errorMsg = 'Vídeo não encontrado. Verifique se o arquivo existe.';
+            } else if (data.details?.includes('401')) {
+              errorMsg = 'Erro de autenticação. Faça login novamente.';
+              setTimeout(() => {
+                window.location.href = '/login';
+              }, 2000);
+            } else if (data.details?.includes('timeout')) {
+              errorMsg = 'Timeout no carregamento. Tente novamente.';
+            }
 
             // Mensagens mais amigáveis para erros SSH
             if (src && src.includes('/api/videos-ssh/')) {
