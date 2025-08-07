@@ -6,7 +6,15 @@ const path = require('path');
 
 const router = express.Router();
 
-// GET /api/conversion/videos - Lista vídeos que precisam de conversão
+// Configurações de qualidade predefinidas
+const qualityPresets = {
+  baixa: { bitrate: 800, resolution: '854x480', crf: 28 },
+  media: { bitrate: 1500, resolution: '1280x720', crf: 25 },
+  alta: { bitrate: 2500, resolution: '1920x1080', crf: 23 },
+  fullhd: { bitrate: 4000, resolution: '1920x1080', crf: 21 }
+};
+
+// GET /api/conversion/videos - Lista TODOS os vídeos (não apenas os que precisam conversão)
 router.get('/videos', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -48,21 +56,45 @@ router.get('/videos', authMiddleware, async (req, res) => {
       params
     );
 
-    // Processar vídeos para identificar quais precisam de conversão
+    // Processar TODOS os vídeos para mostrar opções de conversão
     const videos = rows.map(video => {
       const fileName = path.basename(video.url);
       const fileExtension = path.extname(fileName).toLowerCase();
       const isMP4 = fileExtension === '.mp4';
-      const needsConversion = !isMP4 || (video.bitrate_video && video.bitrate_video > (user?.bitrate || 2500));
+      const currentBitrate = video.bitrate_video || 0;
+      const userBitrateLimit = req.user.bitrate || 2500;
+      
+      // Determinar quais qualidades estão disponíveis baseado no limite do usuário
+      const availableQualities = [];
+      Object.entries(qualityPresets).forEach(([quality, preset]) => {
+        if (preset.bitrate <= userBitrateLimit) {
+          availableQualities.push({
+            quality,
+            bitrate: preset.bitrate,
+            resolution: preset.resolution,
+            canConvert: true
+          });
+        } else {
+          availableQualities.push({
+            quality,
+            bitrate: preset.bitrate,
+            resolution: preset.resolution,
+            canConvert: false,
+            reason: `Excede limite do plano (${userBitrateLimit} kbps)`
+          });
+        }
+      });
       
       return {
         ...video,
         formato_original: video.formato_original || fileExtension.substring(1),
         is_mp4: isMP4,
-        needs_conversion: needsConversion,
-        can_use: !needsConversion || video.status_conversao === 'concluida',
-        bitrate_exceeds_limit: video.bitrate_video && video.bitrate_video > (user?.bitrate || 2500),
-        user_bitrate_limit: user?.bitrate || 2500
+        current_bitrate: currentBitrate,
+        user_bitrate_limit: userBitrateLimit,
+        available_qualities: availableQualities,
+        can_use_current: currentBitrate <= userBitrateLimit,
+        needs_conversion: !isMP4 || currentBitrate > userBitrateLimit || !currentBitrate,
+        conversion_status: video.status_conversao || 'nao_iniciada'
       };
     });
 
@@ -70,9 +102,10 @@ router.get('/videos', authMiddleware, async (req, res) => {
       success: true,
       videos,
       user_limits: {
-        bitrate: user?.bitrate || 2500,
-        storage: user?.espaco || 1000
-      }
+        bitrate: req.user.bitrate || 2500,
+        storage: req.user.espaco || 1000
+      },
+      quality_presets: qualityPresets
     });
   } catch (error) {
     console.error('Erro ao listar vídeos para conversão:', error);
@@ -84,10 +117,10 @@ router.get('/videos', authMiddleware, async (req, res) => {
   }
 });
 
-// POST /api/conversion/convert - Converter vídeo
+// POST /api/conversion/convert - Converter vídeo com qualidade selecionada
 router.post('/convert', authMiddleware, async (req, res) => {
   try {
-    const { video_id, target_bitrate, target_resolution } = req.body;
+    const { video_id, quality, custom_bitrate, custom_resolution } = req.body;
     const userId = req.user.id;
     const userLogin = req.user.email ? req.user.email.split('@')[0] : `user_${userId}`;
 
@@ -98,14 +131,29 @@ router.post('/convert', authMiddleware, async (req, res) => {
       });
     }
 
-    // Validar bitrate
-    const maxBitrate = req.user.bitrate || 2500;
-    const finalBitrate = Math.min(target_bitrate || maxBitrate, maxBitrate);
-
-    if (target_bitrate && target_bitrate > maxBitrate) {
+    // Determinar configurações de conversão
+    let conversionConfig;
+    if (quality && qualityPresets[quality]) {
+      conversionConfig = qualityPresets[quality];
+    } else if (custom_bitrate && custom_resolution) {
+      conversionConfig = {
+        bitrate: custom_bitrate,
+        resolution: custom_resolution,
+        crf: 23 // CRF padrão para configurações customizadas
+      };
+    } else {
       return res.status(400).json({
         success: false,
-        error: `Bitrate solicitado (${target_bitrate} kbps) excede o limite do plano (${maxBitrate} kbps)`
+        error: 'Especifique uma qualidade predefinida ou configurações customizadas'
+      });
+    }
+
+    // Validar bitrate
+    const maxBitrate = req.user.bitrate || 2500;
+    if (conversionConfig.bitrate > maxBitrate) {
+      return res.status(400).json({
+        success: false,
+        error: `Bitrate solicitado (${conversionConfig.bitrate} kbps) excede o limite do plano (${maxBitrate} kbps)`
       });
     }
 
@@ -153,14 +201,14 @@ router.post('/convert', authMiddleware, async (req, res) => {
     const fileName = path.basename(inputPath);
     const directory = path.dirname(inputPath);
     const nameWithoutExt = path.parse(fileName).name;
-    const outputPath = path.join(directory, `${nameWithoutExt}_converted.mp4`);
+    const qualitySuffix = quality ? `_${quality}` : `_${conversionConfig.bitrate}k`;
+    const outputPath = path.join(directory, `${nameWithoutExt}${qualitySuffix}.mp4`);
 
     try {
-      // Comando FFmpeg para conversão
-      const resolution = target_resolution || '1920x1080';
-      const ffmpegCommand = `ffmpeg -i "${inputPath}" -c:v libx264 -preset medium -crf 23 -b:v ${finalBitrate}k -maxrate ${finalBitrate}k -bufsize ${finalBitrate * 2}k -vf "scale=${resolution}" -c:a aac -b:a 128k -movflags +faststart "${outputPath}" -y 2>/dev/null && echo "CONVERSION_SUCCESS" || echo "CONVERSION_ERROR"`;
+      // Comando FFmpeg para conversão com qualidade específica
+      const ffmpegCommand = `ffmpeg -i "${inputPath}" -c:v libx264 -preset medium -crf ${conversionConfig.crf} -b:v ${conversionConfig.bitrate}k -maxrate ${conversionConfig.bitrate}k -bufsize ${conversionConfig.bitrate * 2}k -vf "scale=${conversionConfig.resolution}" -c:a aac -b:a 128k -movflags +faststart "${outputPath}" -y 2>/dev/null && echo "CONVERSION_SUCCESS" || echo "CONVERSION_ERROR"`;
       
-      console.log(`🔄 Iniciando conversão: ${fileName} -> ${finalBitrate} kbps`);
+      console.log(`🔄 Iniciando conversão: ${fileName} -> ${quality || 'custom'} (${conversionConfig.bitrate} kbps)`);
       
       const result = await SSHManager.executeCommand(serverId, ffmpegCommand);
       
@@ -174,7 +222,7 @@ router.post('/convert', authMiddleware, async (req, res) => {
         const probeCommand = `ffprobe -v quiet -print_format json -show_format -show_streams "${outputPath}" 2>/dev/null || echo "NO_PROBE"`;
         const probeResult = await SSHManager.executeCommand(serverId, probeCommand);
         
-        let realBitrate = finalBitrate;
+        let realBitrate = conversionConfig.bitrate;
         let realDuration = video.duracao_segundos || 0;
         
         if (!probeResult.stdout.includes('NO_PROBE')) {
@@ -182,7 +230,7 @@ router.post('/convert', authMiddleware, async (req, res) => {
             const probeData = JSON.parse(probeResult.stdout);
             if (probeData.format) {
               realDuration = Math.floor(parseFloat(probeData.format.duration) || 0);
-              realBitrate = Math.floor(parseInt(probeData.format.bit_rate) / 1000) || finalBitrate;
+              realBitrate = Math.floor(parseInt(probeData.format.bit_rate) / 1000) || conversionConfig.bitrate;
             }
           } catch (parseError) {
             console.warn('Erro ao parsear dados do ffprobe:', parseError);
@@ -197,22 +245,24 @@ router.post('/convert', authMiddleware, async (req, res) => {
            bitrate_video = ?,
            tamanho_arquivo_mp4 = ?,
            duracao_segundos = ?,
-           data_conversao = NOW()
+           data_conversao = NOW(),
+           qualidade_conversao = ?
            WHERE codigo = ?`,
-          [outputPath, realBitrate, newSize, realDuration, video_id]
+          [outputPath, realBitrate, newSize, realDuration, quality || 'custom', video_id]
         );
 
-        console.log(`✅ Conversão concluída: ${fileName} -> ${realBitrate} kbps`);
+        console.log(`✅ Conversão concluída: ${fileName} -> ${quality || 'custom'} (${realBitrate} kbps)`);
 
         res.json({
           success: true,
-          message: 'Vídeo convertido com sucesso!',
+          message: `Vídeo convertido com sucesso para qualidade ${quality || 'customizada'}!`,
           converted_video: {
             id: video_id,
             path_mp4: outputPath,
             bitrate: realBitrate,
             size: newSize,
-            duration: realDuration
+            duration: realDuration,
+            quality: quality || 'custom'
           }
         });
       } else {
@@ -258,7 +308,8 @@ router.get('/status/:video_id', authMiddleware, async (req, res) => {
         bitrate_video,
         path_video_mp4,
         data_conversao,
-        formato_original
+        formato_original,
+        qualidade_conversao
        FROM playlists_videos 
        WHERE codigo = ? AND path_video LIKE ?`,
       [video_id, `%/${userLogin}/%`]
@@ -282,7 +333,8 @@ router.get('/status/:video_id', authMiddleware, async (req, res) => {
         bitrate: video.bitrate_video,
         mp4_path: video.path_video_mp4,
         converted_at: video.data_conversao,
-        original_format: video.formato_original
+        original_format: video.formato_original,
+        quality: video.qualidade_conversao
       }
     });
   } catch (error) {
@@ -290,6 +342,36 @@ router.get('/status/:video_id', authMiddleware, async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: 'Erro ao verificar status',
+      details: error.message 
+    });
+  }
+});
+
+// GET /api/conversion/qualities - Obter qualidades disponíveis para o usuário
+router.get('/qualities', authMiddleware, async (req, res) => {
+  try {
+    const userBitrateLimit = req.user.bitrate || 2500;
+    
+    const availableQualities = Object.entries(qualityPresets).map(([quality, preset]) => ({
+      quality,
+      label: quality.charAt(0).toUpperCase() + quality.slice(1),
+      bitrate: preset.bitrate,
+      resolution: preset.resolution,
+      available: preset.bitrate <= userBitrateLimit,
+      description: `${preset.resolution} @ ${preset.bitrate} kbps`
+    }));
+
+    res.json({
+      success: true,
+      qualities: availableQualities,
+      user_limit: userBitrateLimit,
+      custom_allowed: true
+    });
+  } catch (error) {
+    console.error('Erro ao obter qualidades:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Erro ao obter qualidades disponíveis',
       details: error.message 
     });
   }
@@ -342,7 +424,8 @@ router.delete('/:video_id', authMiddleware, async (req, res) => {
        path_video_mp4 = NULL,
        bitrate_video = NULL,
        tamanho_arquivo_mp4 = NULL,
-       data_conversao = NULL
+       data_conversao = NULL,
+       qualidade_conversao = NULL
        WHERE codigo = ?`,
       [video_id]
     );

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Video, Settings, Play, Trash2, RefreshCw, AlertCircle, CheckCircle, Zap, HardDrive, Clock, Download } from 'lucide-react';
+import { ChevronLeft, Video, Settings, Play, Trash2, RefreshCw, AlertCircle, CheckCircle, Zap, HardDrive, Clock, Download, X, Maximize, Minimize } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
@@ -16,10 +16,20 @@ interface VideoConversion {
   path_video_mp4?: string;
   data_conversao?: string;
   is_mp4: boolean;
-  needs_conversion: boolean;
-  can_use: boolean;
-  bitrate_exceeds_limit: boolean;
+  current_bitrate: number;
   user_bitrate_limit: number;
+  available_qualities: Array<{
+    quality: string;
+    bitrate: number;
+    resolution: string;
+    canConvert: boolean;
+    reason?: string;
+    description: string;
+  }>;
+  can_use_current: boolean;
+  needs_conversion: boolean;
+  conversion_status: string;
+  qualidade_conversao?: string;
 }
 
 interface Folder {
@@ -27,10 +37,20 @@ interface Folder {
   nome: string;
 }
 
+interface QualityPreset {
+  quality: string;
+  label: string;
+  bitrate: number;
+  resolution: string;
+  available: boolean;
+  description: string;
+}
+
 interface ConversionSettings {
-  target_bitrate: number;
-  target_resolution: string;
-  quality_preset: 'fast' | 'medium' | 'slow';
+  quality?: string;
+  custom_bitrate?: number;
+  custom_resolution?: string;
+  use_custom: boolean;
 }
 
 const ConversaoVideos: React.FC = () => {
@@ -43,13 +63,19 @@ const ConversaoVideos: React.FC = () => {
   const [showConversionModal, setShowConversionModal] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<VideoConversion | null>(null);
   const [conversionSettings, setConversionSettings] = useState<ConversionSettings>({
-    target_bitrate: user?.bitrate || 2500,
-    target_resolution: '1920x1080',
-    quality_preset: 'medium'
+    quality: 'media',
+    use_custom: false
   });
+  const [qualityPresets, setQualityPresets] = useState<QualityPreset[]>([]);
+  
+  // Player modal state
+  const [showPlayerModal, setShowPlayerModal] = useState(false);
+  const [currentVideo, setCurrentVideo] = useState<VideoConversion | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     loadFolders();
+    loadQualityPresets();
   }, []);
 
   useEffect(() => {
@@ -73,6 +99,24 @@ const ConversaoVideos: React.FC = () => {
       }
     } catch (error) {
       toast.error('Erro ao carregar pastas');
+    }
+  };
+
+  const loadQualityPresets = async () => {
+    try {
+      const token = await getToken();
+      const response = await fetch('/api/conversion/qualities', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setQualityPresets(data.qualities);
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar qualidades:', error);
     }
   };
 
@@ -104,10 +148,19 @@ const ConversaoVideos: React.FC = () => {
 
   const openConversionModal = (video: VideoConversion) => {
     setSelectedVideo(video);
+    
+    // Definir qualidade padrão baseada no bitrate atual
+    let defaultQuality = 'media';
+    if (video.current_bitrate <= 800) defaultQuality = 'baixa';
+    else if (video.current_bitrate <= 1500) defaultQuality = 'media';
+    else if (video.current_bitrate <= 2500) defaultQuality = 'alta';
+    else defaultQuality = 'fullhd';
+    
     setConversionSettings({
-      target_bitrate: Math.min(video.bitrate_video || user?.bitrate || 2500, user?.bitrate || 2500),
-      target_resolution: '1920x1080',
-      quality_preset: 'medium'
+      quality: defaultQuality,
+      custom_bitrate: video.current_bitrate || user?.bitrate || 2500,
+      custom_resolution: '1920x1080',
+      use_custom: false
     });
     setShowConversionModal(true);
   };
@@ -120,18 +173,22 @@ const ConversaoVideos: React.FC = () => {
 
     try {
       const token = await getToken();
+      const requestBody = conversionSettings.use_custom ? {
+        video_id: selectedVideo.id,
+        custom_bitrate: conversionSettings.custom_bitrate,
+        custom_resolution: conversionSettings.custom_resolution
+      } : {
+        video_id: selectedVideo.id,
+        quality: conversionSettings.quality
+      };
+
       const response = await fetch('/api/conversion/convert', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({
-          video_id: selectedVideo.id,
-          target_bitrate: conversionSettings.target_bitrate,
-          target_resolution: conversionSettings.target_resolution,
-          quality_preset: conversionSettings.quality_preset
-        })
+        body: JSON.stringify(requestBody)
       });
 
       const result = await response.json();
@@ -214,6 +271,35 @@ const ConversaoVideos: React.FC = () => {
     }
   };
 
+  const openVideoPlayer = (video: VideoConversion) => {
+    setCurrentVideo(video);
+    setShowPlayerModal(true);
+  };
+
+  const closeVideoPlayer = () => {
+    setShowPlayerModal(false);
+    setCurrentVideo(null);
+    setIsFullscreen(false);
+  };
+
+  const buildVideoUrl = (url: string) => {
+    if (!url) return '';
+    
+    // Se já é uma URL completa, usar como está
+    if (url.startsWith('http')) {
+      return url;
+    }
+    
+    // Para vídeos SSH, usar URL diretamente
+    if (url.includes('/api/videos-ssh/')) {
+      return url;
+    }
+    
+    // Todos os vídeos agora são MP4, usar proxy /content do backend
+    const cleanPath = url.replace(/^\/+/, '');
+    return `/content/${cleanPath}`;
+  };
+
   const formatFileSize = (bytes: number): string => {
     if (!bytes) return '0 B';
     const units = ['B', 'KB', 'MB', 'GB'];
@@ -253,10 +339,7 @@ const ConversaoVideos: React.FC = () => {
       case 'erro':
         return <AlertCircle className="h-4 w-4 text-red-600" />;
       default:
-        if (video.needs_conversion) {
-          return <AlertCircle className="h-4 w-4 text-yellow-600" />;
-        }
-        return <CheckCircle className="h-4 w-4 text-green-600" />;
+        return <Video className="h-4 w-4 text-gray-600" />;
     }
   };
 
@@ -267,16 +350,16 @@ const ConversaoVideos: React.FC = () => {
 
     switch (video.status_conversao) {
       case 'concluida':
-        return 'Convertido';
+        return `Convertido (${video.qualidade_conversao || 'custom'})`;
       case 'em_andamento':
         return 'Convertendo...';
       case 'erro':
         return 'Erro na conversão';
       default:
-        if (video.needs_conversion) {
-          return video.bitrate_exceeds_limit ? 'Bitrate excede limite' : 'Precisa converter';
+        if (video.is_mp4 && video.can_use_current) {
+          return 'MP4 Original';
         }
-        return video.is_mp4 ? 'MP4 Original' : 'Compatível';
+        return 'Disponível para conversão';
     }
   };
 
@@ -293,20 +376,27 @@ const ConversaoVideos: React.FC = () => {
       case 'erro':
         return 'text-red-600';
       default:
-        if (video.needs_conversion) {
-          return video.bitrate_exceeds_limit ? 'text-red-600' : 'text-yellow-600';
+        if (video.is_mp4 && video.can_use_current) {
+          return 'text-green-600';
         }
-        return 'text-green-600';
+        return 'text-yellow-600';
     }
   };
 
-  const canUseVideo = (video: VideoConversion) => {
-    return video.can_use && !video.bitrate_exceeds_limit;
+  const getQualityLabel = (quality: string) => {
+    const labels: Record<string, string> = {
+      baixa: 'Baixa (480p)',
+      media: 'Média (720p)',
+      alta: 'Alta (1080p)',
+      fullhd: 'Full HD (1080p+)'
+    };
+    return labels[quality] || quality;
   };
 
+  const totalVideos = videos.length;
   const needsConversion = videos.filter(v => v.needs_conversion && v.status_conversao !== 'concluida').length;
   const convertedVideos = videos.filter(v => v.status_conversao === 'concluida').length;
-  const blockedVideos = videos.filter(v => v.bitrate_exceeds_limit && v.status_conversao !== 'concluida').length;
+  const mp4Videos = videos.filter(v => v.is_mp4 && v.can_use_current).length;
 
   return (
     <div className="space-y-6">
@@ -331,19 +421,7 @@ const ConversaoVideos: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Total de Vídeos</p>
-              <p className="text-2xl font-bold text-gray-900">{videos.length}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div className="flex items-center">
-            <div className="p-3 bg-yellow-100 rounded-lg">
-              <Settings className="h-6 w-6 text-yellow-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Precisam Conversão</p>
-              <p className="text-2xl font-bold text-gray-900">{needsConversion}</p>
+              <p className="text-2xl font-bold text-gray-900">{totalVideos}</p>
             </div>
           </div>
         </div>
@@ -354,20 +432,32 @@ const ConversaoVideos: React.FC = () => {
               <CheckCircle className="h-6 w-6 text-green-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Convertidos</p>
-              <p className="text-2xl font-bold text-gray-900">{convertedVideos}</p>
+              <p className="text-sm font-medium text-gray-500">MP4 Originais</p>
+              <p className="text-2xl font-bold text-gray-900">{mp4Videos}</p>
             </div>
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
           <div className="flex items-center">
-            <div className="p-3 bg-red-100 rounded-lg">
-              <AlertCircle className="h-6 w-6 text-red-600" />
+            <div className="p-3 bg-yellow-100 rounded-lg">
+              <Settings className="h-6 w-6 text-yellow-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Bloqueados</p>
-              <p className="text-2xl font-bold text-gray-900">{blockedVideos}</p>
+              <p className="text-sm font-medium text-gray-500">Podem Converter</p>
+              <p className="text-2xl font-bold text-gray-900">{needsConversion}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div className="flex items-center">
+            <div className="p-3 bg-purple-100 rounded-lg">
+              <Zap className="h-6 w-6 text-purple-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-500">Convertidos</p>
+              <p className="text-2xl font-bold text-gray-900">{convertedVideos}</p>
             </div>
           </div>
         </div>
@@ -415,28 +505,9 @@ const ConversaoVideos: React.FC = () => {
         </div>
       </div>
 
-      {/* Avisos importantes */}
-      {blockedVideos > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <div className="flex items-start">
-            <AlertCircle className="h-5 w-5 text-red-600 mr-3 mt-0.5" />
-            <div>
-              <h3 className="text-red-900 font-medium mb-2">⚠️ Vídeos Bloqueados</h3>
-              <p className="text-red-800 mb-2">
-                {blockedVideos} vídeo(s) possuem bitrate superior ao limite do seu plano ({user?.bitrate || 2500} kbps) 
-                e não podem ser usados em transmissões até serem convertidos.
-              </p>
-              <p className="text-red-700 text-sm">
-                Use a conversão para reduzir o bitrate e tornar os vídeos compatíveis com seu plano.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Lista de vídeos */}
       <div className="bg-white rounded-lg shadow-sm p-6">
-        <h2 className="text-xl font-semibold text-gray-800 mb-6">Vídeos para Conversão</h2>
+        <h2 className="text-xl font-semibold text-gray-800 mb-6">Todos os Vídeos</h2>
 
         {videos.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
@@ -451,7 +522,7 @@ const ConversaoVideos: React.FC = () => {
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-3 px-4 font-medium text-gray-700">Vídeo</th>
                   <th className="text-center py-3 px-4 font-medium text-gray-700">Formato</th>
-                  <th className="text-center py-3 px-4 font-medium text-gray-700">Bitrate</th>
+                  <th className="text-center py-3 px-4 font-medium text-gray-700">Bitrate Atual</th>
                   <th className="text-center py-3 px-4 font-medium text-gray-700">Tamanho</th>
                   <th className="text-center py-3 px-4 font-medium text-gray-700">Status</th>
                   <th className="text-center py-3 px-4 font-medium text-gray-700">Ações</th>
@@ -487,11 +558,11 @@ const ConversaoVideos: React.FC = () => {
                     <td className="py-3 px-4 text-center">
                       <div className="flex flex-col items-center">
                         <span className={`font-medium ${
-                          video.bitrate_exceeds_limit ? 'text-red-600' : 'text-gray-900'
+                          video.current_bitrate > video.user_bitrate_limit ? 'text-red-600' : 'text-gray-900'
                         }`}>
-                          {video.bitrate_video || 'N/A'} kbps
+                          {video.current_bitrate || 'N/A'} kbps
                         </span>
-                        {video.bitrate_exceeds_limit && (
+                        {video.current_bitrate > video.user_bitrate_limit && (
                           <span className="text-xs text-red-600">
                             Limite: {video.user_bitrate_limit} kbps
                           </span>
@@ -514,16 +585,22 @@ const ConversaoVideos: React.FC = () => {
                     
                     <td className="py-3 px-4 text-center">
                       <div className="flex justify-center space-x-2">
-                        {video.needs_conversion && video.status_conversao !== 'concluida' && (
-                          <button
-                            onClick={() => openConversionModal(video)}
-                            disabled={converting[video.id] || video.status_conversao === 'em_andamento'}
-                            className="text-blue-600 hover:text-blue-800 disabled:opacity-50 p-1"
-                            title="Converter vídeo"
-                          >
-                            <Settings className="h-4 w-4" />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => openVideoPlayer(video)}
+                          className="text-blue-600 hover:text-blue-800 p-1"
+                          title="Visualizar vídeo"
+                        >
+                          <Play className="h-4 w-4" />
+                        </button>
+                        
+                        <button
+                          onClick={() => openConversionModal(video)}
+                          disabled={converting[video.id] || video.status_conversao === 'em_andamento'}
+                          className="text-purple-600 hover:text-purple-800 disabled:opacity-50 p-1"
+                          title="Converter vídeo"
+                        >
+                          <Settings className="h-4 w-4" />
+                        </button>
                         
                         {video.status_conversao === 'concluida' && (
                           <button
@@ -532,20 +609,6 @@ const ConversaoVideos: React.FC = () => {
                             title="Remover conversão"
                           >
                             <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                        
-                        {canUseVideo(video) && (
-                          <button
-                            onClick={() => {
-                              // Abrir vídeo em nova aba
-                              const videoUrl = video.path_video_mp4 || video.url;
-                              window.open(`/content/${videoUrl}`, '_blank');
-                            }}
-                            className="text-green-600 hover:text-green-800 p-1"
-                            title="Visualizar vídeo"
-                          >
-                            <Play className="h-4 w-4" />
                           </button>
                         )}
                       </div>
@@ -561,7 +624,7 @@ const ConversaoVideos: React.FC = () => {
       {/* Modal de Configuração de Conversão */}
       {showConversionModal && selectedVideo && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full">
+          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold">Configurar Conversão</h3>
@@ -569,7 +632,7 @@ const ConversaoVideos: React.FC = () => {
                   onClick={() => setShowConversionModal(false)}
                   className="text-gray-400 hover:text-gray-600"
                 >
-                  ×
+                  <X className="h-5 w-5" />
                 </button>
               </div>
               <p className="text-sm text-gray-600 mt-2">
@@ -589,9 +652,9 @@ const ConversaoVideos: React.FC = () => {
                   <div>
                     <span className="text-gray-600">Bitrate:</span>
                     <span className={`ml-2 font-medium ${
-                      selectedVideo.bitrate_exceeds_limit ? 'text-red-600' : 'text-gray-900'
+                      selectedVideo.current_bitrate > selectedVideo.user_bitrate_limit ? 'text-red-600' : 'text-gray-900'
                     }`}>
-                      {selectedVideo.bitrate_video || 'N/A'} kbps
+                      {selectedVideo.current_bitrate || 'N/A'} kbps
                     </span>
                   </div>
                   <div>
@@ -609,72 +672,107 @@ const ConversaoVideos: React.FC = () => {
                 </div>
               </div>
 
-              {/* Configurações de conversão */}
+              {/* Seleção de qualidade */}
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Bitrate de Destino (kbps)
+                <div className="flex items-center space-x-4">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      checked={!conversionSettings.use_custom}
+                      onChange={() => setConversionSettings(prev => ({ ...prev, use_custom: false }))}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300"
+                    />
+                    <span className="ml-2 text-sm font-medium text-gray-700">Usar qualidade predefinida</span>
                   </label>
-                  <input
-                    type="number"
-                    min="500"
-                    max={user?.bitrate || 2500}
-                    value={conversionSettings.target_bitrate}
-                    onChange={(e) => setConversionSettings(prev => ({ 
-                      ...prev, 
-                      target_bitrate: Math.min(parseInt(e.target.value) || 0, user?.bitrate || 2500)
-                    }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Máximo permitido: {user?.bitrate || 2500} kbps
-                  </p>
-                  {conversionSettings.target_bitrate > (user?.bitrate || 2500) && (
-                    <p className="text-xs text-red-600 mt-1">
-                      ⚠️ Bitrate excede o limite do seu plano
-                    </p>
-                  )}
+                  
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      checked={conversionSettings.use_custom}
+                      onChange={() => setConversionSettings(prev => ({ ...prev, use_custom: true }))}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300"
+                    />
+                    <span className="ml-2 text-sm font-medium text-gray-700">Configuração customizada</span>
+                  </label>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Resolução de Destino
-                  </label>
-                  <select
-                    value={conversionSettings.target_resolution}
-                    onChange={(e) => setConversionSettings(prev => ({ 
-                      ...prev, 
-                      target_resolution: e.target.value 
-                    }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
-                  >
-                    <option value="1920x1080">1080p (1920x1080)</option>
-                    <option value="1280x720">720p (1280x720)</option>
-                    <option value="854x480">480p (854x480)</option>
-                    <option value="640x360">360p (640x360)</option>
-                  </select>
-                </div>
+                {!conversionSettings.use_custom ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                      Qualidade de Conversão
+                    </label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {qualityPresets.map((preset) => (
+                        <label key={preset.quality} className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="quality"
+                            value={preset.quality}
+                            checked={conversionSettings.quality === preset.quality}
+                            onChange={(e) => setConversionSettings(prev => ({ ...prev, quality: e.target.value }))}
+                            disabled={!preset.available}
+                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300"
+                          />
+                          <div className="ml-3 flex-1">
+                            <div className="flex items-center justify-between">
+                              <span className={`font-medium ${preset.available ? 'text-gray-900' : 'text-gray-400'}`}>
+                                {preset.label}
+                              </span>
+                              <span className={`text-sm ${preset.available ? 'text-gray-600' : 'text-red-600'}`}>
+                                {preset.bitrate} kbps
+                              </span>
+                            </div>
+                            <p className={`text-xs ${preset.available ? 'text-gray-500' : 'text-red-500'}`}>
+                              {preset.description}
+                              {!preset.available && ` (Excede limite: ${user?.bitrate || 2500} kbps)`}
+                            </p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Bitrate Customizado (kbps)
+                      </label>
+                      <input
+                        type="number"
+                        min="500"
+                        max={user?.bitrate || 2500}
+                        value={conversionSettings.custom_bitrate || ''}
+                        onChange={(e) => setConversionSettings(prev => ({ 
+                          ...prev, 
+                          custom_bitrate: parseInt(e.target.value) || undefined
+                        }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Máximo permitido: {user?.bitrate || 2500} kbps
+                      </p>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Qualidade de Conversão
-                  </label>
-                  <select
-                    value={conversionSettings.quality_preset}
-                    onChange={(e) => setConversionSettings(prev => ({ 
-                      ...prev, 
-                      quality_preset: e.target.value as any
-                    }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
-                  >
-                    <option value="fast">Rápida (menor qualidade)</option>
-                    <option value="medium">Média (balanceada)</option>
-                    <option value="slow">Lenta (melhor qualidade)</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Qualidade mais alta = conversão mais lenta
-                  </p>
-                </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Resolução Customizada
+                      </label>
+                      <select
+                        value={conversionSettings.custom_resolution || '1920x1080'}
+                        onChange={(e) => setConversionSettings(prev => ({ 
+                          ...prev, 
+                          custom_resolution: e.target.value 
+                        }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                      >
+                        <option value="1920x1080">1080p (1920x1080)</option>
+                        <option value="1280x720">720p (1280x720)</option>
+                        <option value="854x480">480p (854x480)</option>
+                        <option value="640x360">360p (640x360)</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Estimativa */}
@@ -682,14 +780,19 @@ const ConversaoVideos: React.FC = () => {
                 <h4 className="font-medium text-blue-900 mb-2">📊 Estimativa da Conversão</h4>
                 <div className="text-blue-800 text-sm space-y-1">
                   <p>• Formato final: MP4 (H.264 + AAC)</p>
-                  <p>• Bitrate: {conversionSettings.target_bitrate} kbps</p>
-                  <p>• Resolução: {conversionSettings.target_resolution}</p>
-                  <p>• Qualidade: {conversionSettings.quality_preset}</p>
-                  <p>• Tempo estimado: {
-                    conversionSettings.quality_preset === 'fast' ? '2-5 minutos' :
-                    conversionSettings.quality_preset === 'medium' ? '5-10 minutos' :
-                    '10-20 minutos'
-                  }</p>
+                  {!conversionSettings.use_custom ? (
+                    <>
+                      <p>• Qualidade: {getQualityLabel(conversionSettings.quality || 'media')}</p>
+                      <p>• Bitrate: {qualityPresets.find(p => p.quality === conversionSettings.quality)?.bitrate || 'N/A'} kbps</p>
+                      <p>• Resolução: {qualityPresets.find(p => p.quality === conversionSettings.quality)?.resolution || 'N/A'}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p>• Bitrate: {conversionSettings.custom_bitrate || 'N/A'} kbps</p>
+                      <p>• Resolução: {conversionSettings.custom_resolution || 'N/A'}</p>
+                    </>
+                  )}
+                  <p>• Tempo estimado: 5-15 minutos (dependendo do tamanho)</p>
                 </div>
               </div>
             </div>
@@ -703,7 +806,11 @@ const ConversaoVideos: React.FC = () => {
               </button>
               <button
                 onClick={startConversion}
-                disabled={conversionSettings.target_bitrate > (user?.bitrate || 2500)}
+                disabled={
+                  conversionSettings.use_custom ? 
+                    !conversionSettings.custom_bitrate || (conversionSettings.custom_bitrate > (user?.bitrate || 2500)) :
+                    !qualityPresets.find(p => p.quality === conversionSettings.quality)?.available
+                }
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center"
               >
                 <Settings className="h-4 w-4 mr-2" />
@@ -714,19 +821,83 @@ const ConversaoVideos: React.FC = () => {
         </div>
       )}
 
+      {/* Modal do Player HTML5 */}
+      {showPlayerModal && currentVideo && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              closeVideoPlayer();
+            }
+          }}
+        >
+          <div className={`bg-black rounded-lg relative ${
+            isFullscreen ? 'w-screen h-screen' : 'max-w-4xl w-full h-[70vh]'
+          }`}>
+            {/* Controles do Modal */}
+            <div className="absolute top-4 right-4 z-20 flex items-center space-x-2">
+              <button
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="text-white bg-blue-600 hover:bg-blue-700 rounded-full p-3 transition-colors duration-200 shadow-lg"
+                title={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}
+              >
+                {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+              </button>
+              
+              <button
+                onClick={closeVideoPlayer}
+                className="text-white bg-red-600 hover:bg-red-700 rounded-full p-3 transition-colors duration-200 shadow-lg"
+                title="Fechar player"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Título do Vídeo */}
+            <div className="absolute top-4 left-4 z-20 bg-black bg-opacity-60 text-white px-4 py-2 rounded-lg">
+              <h3 className="font-medium">{currentVideo.nome}</h3>
+              <p className="text-xs opacity-80">
+                {currentVideo.formato_original?.toUpperCase()} • 
+                {currentVideo.current_bitrate} kbps • 
+                {currentVideo.duracao ? formatDuration(currentVideo.duracao) : 'N/A'}
+              </p>
+            </div>
+
+            {/* Player HTML5 Simples */}
+            <div className={`w-full h-full ${isFullscreen ? 'p-0' : 'p-4 pt-16'}`}>
+              <video
+                src={buildVideoUrl(currentVideo.url)}
+                className="w-full h-full object-contain"
+                controls
+                autoPlay
+                preload="metadata"
+                onError={(e) => {
+                  console.error('Erro no player:', e);
+                  toast.error('Erro ao carregar vídeo. Tente abrir em nova aba.');
+                }}
+              >
+                <source src={buildVideoUrl(currentVideo.url)} type="video/mp4" />
+                Seu navegador não suporta reprodução de vídeo.
+              </video>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Informações de ajuda */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
         <div className="flex items-start">
           <AlertCircle className="h-5 w-5 text-blue-600 mr-3 mt-0.5" />
           <div>
-            <h3 className="text-blue-900 font-medium mb-2">Como funciona a conversão</h3>
+            <h3 className="text-blue-900 font-medium mb-2">Sistema de Conversão Avançado</h3>
             <ul className="text-blue-800 text-sm space-y-1">
-              <li>• Todos os vídeos são convertidos para MP4 (H.264 + AAC) para máxima compatibilidade</li>
-              <li>• O bitrate é ajustado conforme o limite do seu plano</li>
-              <li>• Vídeos com bitrate superior ao limite são bloqueados até conversão</li>
-              <li>• A conversão preserva a qualidade visual dentro do bitrate especificado</li>
-              <li>• Após conversão, o vídeo original é mantido como backup</li>
-              <li>• Players usarão automaticamente a versão MP4 convertida</li>
+              <li>• <strong>Todos os vídeos</strong> são listados, independente do formato</li>
+              <li>• <strong>Qualidades predefinidas:</strong> Baixa (480p), Média (720p), Alta (1080p), Full HD (1080p+)</li>
+              <li>• <strong>Configuração customizada:</strong> Defina bitrate e resolução específicos</li>
+              <li>• <strong>Limite respeitado:</strong> Apenas qualidades dentro do seu plano são permitidas</li>
+              <li>• <strong>MP4 originais:</strong> Podem ser reconvertidos para diferentes qualidades</li>
+              <li>• <strong>Player HTML5:</strong> Visualização direta de todos os vídeos</li>
+              <li>• <strong>Conversão inteligente:</strong> Preserva qualidade visual otimizando tamanho</li>
             </ul>
           </div>
         </div>
