@@ -115,6 +115,7 @@ class VideoSSHManager {
                 // Nome do arquivo MP4 (sempre MP4 após conversão)
                 const mp4FileName = fileName.replace(/\.[^/.]+$/, '.mp4');
                 const mp4Path = fullPath.replace(/\.[^/.]+$/, '.mp4');
+                const fileExtension = path.extname(fileName).toLowerCase();
                 
                 videos.push({
                     id: Buffer.from(fullPath).toString('base64'), // ID único baseado no caminho

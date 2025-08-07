@@ -435,16 +435,16 @@ const UniversalVideoPlayer: React.FC<UniversalVideoPlayerProps> = ({
         const token = localStorage.getItem('auth_token');
         if (token && !src.includes('auth_token=')) {
           // Para vídeos /content, adicionar token como parâmetro
-          const urlWithToken = `${src}${src.includes('?') ? '&' : '?'}auth_token=${encodeURIComponent(token)}`;
+          const urlWithToken = `${videoUrl}${videoUrl.includes('?') ? '&' : '?'}auth_token=${encodeURIComponent(token)}`;
           video.setAttribute('crossorigin', 'anonymous');
           video.src = urlWithToken;
         } else {
           video.setAttribute('crossorigin', 'anonymous');
-          video.src = src;
+          video.src = videoUrl;
         }
       } else {
         video.setAttribute('crossorigin', 'anonymous');
-        video.src = src;
+        video.src = videoUrl;
       }
 
       // Só chamar load() se não for URL direta do Wowza

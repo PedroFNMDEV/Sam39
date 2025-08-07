@@ -243,12 +243,10 @@ router.post('/convert', authMiddleware, async (req, res) => {
            status_conversao = "concluida",
            path_video_mp4 = ?,
            bitrate_video = ?,
-           tamanho_arquivo_mp4 = ?,
            duracao_segundos = ?,
-           data_conversao = NOW(),
-           qualidade_conversao = ?
+           data_conversao = NOW()
            WHERE codigo = ?`,
-          [outputPath, realBitrate, newSize, realDuration, quality || 'custom', video_id]
+          [outputPath, realBitrate, realDuration, video_id]
         );
 
         console.log(`✅ Conversão concluída: ${fileName} -> ${quality || 'custom'} (${realBitrate} kbps)`);
@@ -260,7 +258,6 @@ router.post('/convert', authMiddleware, async (req, res) => {
             id: video_id,
             path_mp4: outputPath,
             bitrate: realBitrate,
-            size: newSize,
             duration: realDuration,
             quality: quality || 'custom'
           }
@@ -308,8 +305,7 @@ router.get('/status/:video_id', authMiddleware, async (req, res) => {
         bitrate_video,
         path_video_mp4,
         data_conversao,
-        formato_original,
-        qualidade_conversao
+        formato_original
        FROM playlists_videos 
        WHERE codigo = ? AND path_video LIKE ?`,
       [video_id, `%/${userLogin}/%`]
@@ -333,8 +329,7 @@ router.get('/status/:video_id', authMiddleware, async (req, res) => {
         bitrate: video.bitrate_video,
         mp4_path: video.path_video_mp4,
         converted_at: video.data_conversao,
-        original_format: video.formato_original,
-        quality: video.qualidade_conversao
+        original_format: video.formato_original
       }
     });
   } catch (error) {
@@ -423,9 +418,7 @@ router.delete('/:video_id', authMiddleware, async (req, res) => {
        status_conversao = NULL,
        path_video_mp4 = NULL,
        bitrate_video = NULL,
-       tamanho_arquivo_mp4 = NULL,
-       data_conversao = NULL,
-       qualidade_conversao = NULL
+       data_conversao = NULL
        WHERE codigo = ?`,
       [video_id]
     );

@@ -91,7 +91,9 @@ const Playlists: React.FC = () => {
 
     // Todos os vídeos agora são MP4, usar proxy /content do backend
     const cleanPath = url.replace(/^\/+/, ''); // Remove barras iniciais
-    return `/content/${cleanPath}`;
+    const token = localStorage.getItem('auth_token');
+    const baseUrl = `/content/${cleanPath}`;
+    return token ? `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}auth_token=${encodeURIComponent(token)}` : baseUrl;
   };
 
   // Função otimizada para vídeos SSH

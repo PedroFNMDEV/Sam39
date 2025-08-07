@@ -257,9 +257,12 @@ const Comerciais: React.FC = () => {
     }
     
     if (url.startsWith('/content')) {
-      return url;
+      const token = localStorage.getItem('auth_token');
+      return token ? `${url}${url.includes('?') ? '&' : '?'}auth_token=${encodeURIComponent(token)}` : url;
     } else if (url.startsWith('/')) {
-      return `/content${url}`;
+      const token = localStorage.getItem('auth_token');
+      const baseUrl = `/content${url}`;
+      return token ? `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}auth_token=${encodeURIComponent(token)}` : baseUrl;
     }
     
     return url;

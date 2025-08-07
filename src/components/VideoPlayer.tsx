@@ -82,7 +82,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     
     // Todos os vídeos agora são MP4, usar proxy /content do backend
     const cleanPath = url.replace(/^\/+/, '');
-    return `/content/${cleanPath}`;
+    const token = localStorage.getItem('auth_token');
+    const baseUrl = `/content/${cleanPath}`;
+    return token ? `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}auth_token=${encodeURIComponent(token)}` : baseUrl;
   };
 
   const videoSrc = playlistVideo?.url ? buildVideoUrl(playlistVideo.url) : 

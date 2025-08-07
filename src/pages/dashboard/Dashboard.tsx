@@ -46,6 +46,8 @@ const Dashboard: React.FC = () => {
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [isPlayingPlaylist, setIsPlayingPlaylist] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
+  const [obsStreamActive, setObsStreamActive] = useState(false);
+  const [obsStreamUrl, setObsStreamUrl] = useState<string>('');
 
   // Função para abrir vídeo em nova aba
   const openVideoInNewTab = (video: PlaylistVideo) => {
@@ -172,7 +174,13 @@ const Dashboard: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-          videoUrl = `http://${wowzaHost}:1935/vod/_definst_/mp4:${userLogin}/${folderName}/${finalFileName}/playlist.m3u8`;
+          setObsStatus(data.obs_stream);
+          if (data.obs_stream.is_live) {
+            setObsStreamActive(true);
+            setObsStreamUrl(`http://samhost.wcore.com.br:1935/samhost/${userLogin}_live/playlist.m3u8`);
+          } else {
+            setObsStreamActive(false);
+          }
         }
       }
     } catch (error) {

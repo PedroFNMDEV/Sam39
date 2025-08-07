@@ -305,7 +305,9 @@ const GerenciarVideos: React.FC = () => {
     
     // Todos os vídeos agora são MP4, usar proxy /content do backend
     const cleanPath = url.replace(/^\/+/, '');
-    return `/content/${cleanPath}`;
+    const token = localStorage.getItem('auth_token');
+    const baseUrl = `/content/${cleanPath}`;
+    return token ? `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}auth_token=${encodeURIComponent(token)}` : baseUrl;
   };
 
   const buildMP4Url = (video: Video) => {
@@ -316,7 +318,9 @@ const GerenciarVideos: React.FC = () => {
     const fileName = video.nome.endsWith('.mp4') ? video.nome : video.nome.replace(/\.[^/.]+$/, '.mp4');
     
     // Retornar URL MP4 direta
-    return `/content/${userLogin}/${folderName}/${fileName}`;
+    const token = localStorage.getItem('auth_token');
+    const baseUrl = `/content/${userLogin}/${folderName}/${fileName}`;
+    return token ? `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}auth_token=${encodeURIComponent(token)}` : baseUrl;
   };
 
   const openVideoInNewTab = (video: Video) => {
