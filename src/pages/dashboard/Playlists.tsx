@@ -954,18 +954,22 @@ const Playlists: React.FC = () => {
 
             {/* Player Universal */}
             <div className={`w-full h-full ${isFullscreen ? 'p-0' : 'p-4 pt-16'}`}>
-              <UniversalVideoPlayer
+              <video
                 src={currentVideoUrl}
-                src={buildMP4Url(currentVideo)}
-                autoplay={true}
-                controls={true}
+                className="w-full h-full object-contain"
+                controls
+                autoPlay
+                preload="metadata"
                 onEnded={handleVideoEnded}
-                className="w-full h-full"
-                onError={(error) => {
-                <source src={buildMP4Url(currentVideo)} type="video/mp4" />
+                onError={(e) => {
+                  console.error('Erro no player:', e);
                   toast.error('Erro ao carregar vídeo');
                 }}
-              />
+              >
+                <source src={currentVideoUrl} type="video/mp4" />
+                <source src={currentVideoUrl} type="application/vnd.apple.mpegurl" />
+                Seu navegador não suporta reprodução de vídeo.
+              </video>
             </div>
 
             {/* Controles da playlist */}

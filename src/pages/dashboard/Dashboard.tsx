@@ -343,6 +343,25 @@ const Dashboard: React.FC = () => {
   const activeBitrate = streamData.isLive ? streamData.bitrate : (obsStatus?.bitrate || 0);
   const activeUptime = streamData.isLive ? streamData.uptime : (obsStatus?.uptime || '00:00:00');
 
+  // Função para construir URL de vídeo
+  const buildVideoUrl = (url: string) => {
+    if (!url) return '';
+    
+    // Se já é uma URL completa, usar como está
+    if (url.startsWith('http')) {
+      return url;
+    }
+    
+    // Para vídeos SSH, usar URL diretamente
+    if (url.includes('/api/videos-ssh/')) {
+      return url;
+    }
+    
+    // Todos os vídeos agora são MP4, usar proxy /content do backend
+    const cleanPath = url.replace(/^\/+/, '');
+    return `/content/${cleanPath}`;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -690,10 +709,46 @@ const Dashboard: React.FC = () => {
 
           {/* Player */}
           <div className="relative">
-            <VideoPlayer 
-              playlistVideo={getCurrentVideo()}
-              onVideoEnd={handleVideoEnd}
-            />
+            {/* Player HTML5 Simples */}
+            {getCurrentVideo() ? (
+              <video
+                src={buildVideoUrl(getCurrentVideo()?.url || '')}
+                className="w-full h-full object-contain bg-black rounded-lg"
+                controls
+                autoPlay={false}
+                preload="metadata"
+                onEnded={handleVideoEnd}
+                onError={(e) => {
+                  console.error('Erro no player:', e);
+                }}
+              >
+                <source src={buildVideoUrl(getCurrentVideo()?.url || '')} type="video/mp4" />
+                <source src={buildVideoUrl(getCurrentVideo()?.url || '')} type="application/vnd.apple.mpegurl" />
+                Seu navegador não suporta reprodução de vídeo.
+              </video>
+            ) : obsStreamActive ? (
+              <video
+                src={obsStreamUrl}
+                className="w-full h-full object-contain bg-black rounded-lg"
+                controls
+                autoPlay={false}
+                preload="metadata"
+                onError={(e) => {
+                  console.error('Erro no player OBS:', e);
+                }}
+              >
+                <source src={obsStreamUrl} type="application/vnd.apple.mpegurl" />
+                Seu navegador não suporta reprodução de vídeo.
+              </video>
+            ) : (
+              <div className="w-full h-64 flex flex-col items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 text-white rounded-lg">
+                <Play className="h-16 w-16 mb-4 text-gray-400" />
+                <h3 className="text-xl font-semibold mb-2">Nenhum vídeo carregado</h3>
+                <p className="text-gray-400 text-center max-w-md">
+                  Selecione um vídeo ou inicie uma transmissão para visualizar o conteúdo aqui
+                </p>
+              </div>
+            )}
             
             {/* Overlay para playlist */}
             {isPlayingPlaylist && getCurrentVideo() && (

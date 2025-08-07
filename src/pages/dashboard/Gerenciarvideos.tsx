@@ -710,7 +710,7 @@ const GerenciarVideos: React.FC = () => {
             {/* Player HTML5 Simples */}
             <div className="w-full h-full p-4 pt-16">
               <video
-                src={buildMP4Url(currentVideo)}
+                src={buildVideoUrl(currentVideo.url)}
                 className="w-full h-full object-contain"
                 controls
                 autoPlay
@@ -720,8 +720,8 @@ const GerenciarVideos: React.FC = () => {
                   toast.error('Erro ao carregar vídeo. Tente abrir em nova aba.');
                 }}
               >
-                <source src={buildMP4Url(currentVideo)} type="video/mp4" />
                 <source src={buildVideoUrl(currentVideo.url)} type="video/mp4" />
+                <source src={buildVideoUrl(currentVideo.url)} type="application/vnd.apple.mpegurl" />
                 Seu navegador não suporta reprodução de vídeo.
               </video>
             </div>
