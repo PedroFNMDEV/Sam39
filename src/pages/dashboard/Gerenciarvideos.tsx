@@ -561,6 +561,9 @@ const GerenciarVideos: React.FC = () => {
                                           {video.tamanho && (
                                             <span>💾 {formatFileSize(video.tamanho)}</span>
                                           )}
+                                          {video.bitrate_original && (
+                                            <span>📊 {video.bitrate_original} kbps</span>
+                                          )}
                                         </div>
                                       </>
                                     )}

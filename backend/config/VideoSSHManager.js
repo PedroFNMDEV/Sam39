@@ -79,6 +79,7 @@ class VideoSSHManager {
                 const fileName = path.basename(fullPath);
                 const relativePath = fullPath.replace(`/usr/local/WowzaStreamingEngine/content/${userLogin}/`, '');
                 const folderPath = path.dirname(relativePath);
+                const fileExtension = path.extname(fileName).toLowerCase();
                 
                 // Extrair duração e bitrate do vídeo via ffprobe
                 let duration = 0;
@@ -115,7 +116,6 @@ class VideoSSHManager {
                 // Nome do arquivo MP4 (sempre MP4 após conversão)
                 const mp4FileName = fileName.replace(/\.[^/.]+$/, '.mp4');
                 const mp4Path = fullPath.replace(/\.[^/.]+$/, '.mp4');
-                const fileExtension = path.extname(fileName).toLowerCase();
                 
                 videos.push({
                     id: Buffer.from(fullPath).toString('base64'), // ID único baseado no caminho
@@ -129,6 +129,7 @@ class VideoSSHManager {
                     bitrate_video: videoBitrate,
                     formato_original: videoFormat,
                     can_use: !needsConversion,
+                    bitrate_original: videoBitrate, // Bitrate original do arquivo
                     folder: folderPath === '.' ? 'root' : folderPath,
                     size: size,
                     duration: duration,
