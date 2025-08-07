@@ -303,40 +303,25 @@ const GerenciarVideos: React.FC = () => {
       return url;
     }
     
-    // Para vídeos SSH, usar a URL diretamente
-    if (url.includes('/api/videos-ssh/')) {
-      return url;
-    }
-
-    // Para arquivos locais, sempre usar o proxy /content do backend
+    // Todos os vídeos agora são MP4, usar proxy /content do backend
     const cleanPath = url.replace(/^\/+/, '');
     return `/content/${cleanPath}`;
   };
 
-  const buildHLSUrl = (video: Video) => {
+  const buildMP4Url = (video: Video) => {
     if (!video.url) return '';
     
     const userLogin = user?.email?.split('@')[0] || 'usuario';
     const folderName = video.folder || 'default';
-    const fileName = video.nome;
+    const fileName = video.nome.endsWith('.mp4') ? video.nome : video.nome.replace(/\.[^/.]+$/, '.mp4');
     
-    // Verificar se é MP4 ou precisa de conversão
-    const fileExtension = fileName.split('.').pop()?.toLowerCase();
-    const needsConversion = !['mp4'].includes(fileExtension || '');
-    
-    // Nome do arquivo final (MP4)
-    const finalFileName = needsConversion ? 
-      fileName.replace(/\.[^/.]+$/, '.mp4') : fileName;
-    
-    const isProduction = window.location.hostname !== 'localhost';
-    const wowzaHost = isProduction ? 'samhost.wcore.com.br' : '51.222.156.223';
-    
-    return `http://${wowzaHost}:1935/vod/_definst_/mp4:${userLogin}/${folderName}/${finalFileName}/playlist.m3u8`;
+    // Retornar URL MP4 direta
+    return `/content/${userLogin}/${folderName}/${fileName}`;
   };
 
   const openVideoInNewTab = (video: Video) => {
-    const hlsUrl = buildHLSUrl(video);
-    window.open(hlsUrl, '_blank');
+    const mp4Url = buildMP4Url(video);
+    window.open(mp4Url, '_blank');
   };
 
   const syncFolder = async (folderId: number) => {
@@ -725,7 +710,7 @@ const GerenciarVideos: React.FC = () => {
             {/* Player HTML5 Simples */}
             <div className="w-full h-full p-4 pt-16">
               <video
-                src={buildHLSUrl(currentVideo)}
+                src={buildMP4Url(currentVideo)}
                 className="w-full h-full object-contain"
                 controls
                 autoPlay
@@ -735,7 +720,7 @@ const GerenciarVideos: React.FC = () => {
                   toast.error('Erro ao carregar vídeo. Tente abrir em nova aba.');
                 }}
               >
-                <source src={buildHLSUrl(currentVideo)} type="application/vnd.apple.mpegurl" />
+                <source src={buildMP4Url(currentVideo)} type="video/mp4" />
                 <source src={buildVideoUrl(currentVideo.url)} type="video/mp4" />
                 Seu navegador não suporta reprodução de vídeo.
               </video>

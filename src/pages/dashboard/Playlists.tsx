@@ -88,12 +88,8 @@ const Playlists: React.FC = () => {
       return url;
     }
     
-    // Para vídeos SSH, usar a URL diretamente
-    if (url.includes('/api/videos-ssh/')) {
-      return url;
-    }
 
-    // Para arquivos locais, sempre usar o proxy /content do backend
+    // Todos os vídeos agora são MP4, usar proxy /content do backend
     const cleanPath = url.replace(/^\/+/, ''); // Remove barras iniciais
     return `/content/${cleanPath}`;
   };
@@ -564,19 +560,10 @@ const Playlists: React.FC = () => {
         if (pathParts.length >= 3) {
           const userLogin = pathParts[0];
           const folderName = pathParts[1];
-          const fileName = pathParts[2];
+          const fileName = pathParts[2].endsWith('.mp4') ? pathParts[2] : pathParts[2].replace(/\.[^/.]+$/, '.mp4');
           
-          // Verificar se é MP4 ou precisa de conversão
-          const fileExtension = fileName.split('.').pop()?.toLowerCase();
-          const needsConversion = !['mp4'].includes(fileExtension || '');
-          
-          // Nome do arquivo final (MP4)
-          const finalFileName = needsConversion ? 
-            fileName.replace(/\.[^/.]+$/, '.mp4') : fileName;
-          
-          const isProduction = window.location.hostname !== 'localhost';
-          const wowzaHost = isProduction ? 'samhost.wcore.com.br' : '51.222.156.223';
-          firstVideoUrl = `http://${wowzaHost}:1935/vod/_definst_/mp4:${userLogin}/${folderName}/${finalFileName}/playlist.m3u8`;
+          // Usar URL MP4 direta
+          firstVideoUrl = `/content/${userLogin}/${folderName}/${fileName}`;
         }
       }
       
@@ -603,19 +590,10 @@ const Playlists: React.FC = () => {
         if (pathParts.length >= 3) {
           const userLogin = pathParts[0];
           const folderName = pathParts[1];
-          const fileName = pathParts[2];
+          const fileName = pathParts[2].endsWith('.mp4') ? pathParts[2] : pathParts[2].replace(/\.[^/.]+$/, '.mp4');
           
-          // Verificar se é MP4 ou precisa de conversão
-          const fileExtension = fileName.split('.').pop()?.toLowerCase();
-          const needsConversion = !['mp4'].includes(fileExtension || '');
-          
-          // Nome do arquivo final (MP4)
-          const finalFileName = needsConversion ? 
-            fileName.replace(/\.[^/.]+$/, '.mp4') : fileName;
-          
-          const isProduction = window.location.hostname !== 'localhost';
-          const wowzaHost = isProduction ? 'samhost.wcore.com.br' : '51.222.156.223';
-          nextVideoUrl = `http://${wowzaHost}:1935/vod/_definst_/mp4:${userLogin}/${folderName}/${finalFileName}/playlist.m3u8`;
+          // Usar URL MP4 direta
+          nextVideoUrl = `/content/${userLogin}/${folderName}/${fileName}`;
         }
       }
       
@@ -633,19 +611,10 @@ const Playlists: React.FC = () => {
         if (pathParts.length >= 3) {
           const userLogin = pathParts[0];
           const folderName = pathParts[1];
-          const fileName = pathParts[2];
+          const fileName = pathParts[2].endsWith('.mp4') ? pathParts[2] : pathParts[2].replace(/\.[^/.]+$/, '.mp4');
           
-          // Verificar se é MP4 ou precisa de conversão
-          const fileExtension = fileName.split('.').pop()?.toLowerCase();
-          const needsConversion = !['mp4'].includes(fileExtension || '');
-          
-          // Nome do arquivo final (MP4)
-          const finalFileName = needsConversion ? 
-            fileName.replace(/\.[^/.]+$/, '.mp4') : fileName;
-          
-          const isProduction = window.location.hostname !== 'localhost';
-          const wowzaHost = isProduction ? 'samhost.wcore.com.br' : '51.222.156.223';
-          firstVideoUrl = `http://${wowzaHost}:1935/vod/_definst_/mp4:${userLogin}/${folderName}/${finalFileName}/playlist.m3u8`;
+          // Usar URL MP4 direta
+          firstVideoUrl = `/content/${userLogin}/${folderName}/${fileName}`;
         }
       }
       
@@ -667,19 +636,10 @@ const Playlists: React.FC = () => {
         if (pathParts.length >= 3) {
           const userLogin = pathParts[0];
           const folderName = pathParts[1];
-          const fileName = pathParts[2];
+          const fileName = pathParts[2].endsWith('.mp4') ? pathParts[2] : pathParts[2].replace(/\.[^/.]+$/, '.mp4');
           
-          // Verificar se é MP4 ou precisa de conversão
-          const fileExtension = fileName.split('.').pop()?.toLowerCase();
-          const needsConversion = !['mp4'].includes(fileExtension || '');
-          
-          // Nome do arquivo final (MP4)
-          const finalFileName = needsConversion ? 
-            fileName.replace(/\.[^/.]+$/, '.mp4') : fileName;
-          
-          const isProduction = window.location.hostname !== 'localhost';
-          const wowzaHost = isProduction ? 'samhost.wcore.com.br' : '51.222.156.223';
-          prevVideoUrl = `http://${wowzaHost}:1935/vod/_definst_/mp4:${userLogin}/${folderName}/${finalFileName}/playlist.m3u8`;
+          // Usar URL MP4 direta
+          prevVideoUrl = `/content/${userLogin}/${folderName}/${fileName}`;
         }
       }
       
@@ -701,19 +661,10 @@ const Playlists: React.FC = () => {
         if (pathParts.length >= 3) {
           const userLogin = pathParts[0];
           const folderName = pathParts[1];
-          const fileName = pathParts[2];
+          const fileName = pathParts[2].endsWith('.mp4') ? pathParts[2] : pathParts[2].replace(/\.[^/.]+$/, '.mp4');
           
-          // Verificar se é MP4 ou precisa de conversão
-          const fileExtension = fileName.split('.').pop()?.toLowerCase();
-          const needsConversion = !['mp4'].includes(fileExtension || '');
-          
-          // Nome do arquivo final (MP4)
-          const finalFileName = needsConversion ? 
-            fileName.replace(/\.[^/.]+$/, '.mp4') : fileName;
-          
-          const isProduction = window.location.hostname !== 'localhost';
-          const wowzaHost = isProduction ? 'samhost.wcore.com.br' : '51.222.156.223';
-          nextVideoUrl = `http://${wowzaHost}:1935/vod/_definst_/mp4:${userLogin}/${folderName}/${finalFileName}/playlist.m3u8`;
+          // Usar URL MP4 direta
+          nextVideoUrl = `/content/${userLogin}/${folderName}/${fileName}`;
         }
       }
       
@@ -1005,13 +956,13 @@ const Playlists: React.FC = () => {
             <div className={`w-full h-full ${isFullscreen ? 'p-0' : 'p-4 pt-16'}`}>
               <UniversalVideoPlayer
                 src={currentVideoUrl}
-                title={playlistVideosToPlay[playlistPlayerIndex]?.nome || 'Vídeo'}
+                src={buildMP4Url(currentVideo)}
                 autoplay={true}
                 controls={true}
                 onEnded={handleVideoEnded}
                 className="w-full h-full"
                 onError={(error) => {
-                  console.error('Erro no player:', error);
+                <source src={buildMP4Url(currentVideo)} type="video/mp4" />
                   toast.error('Erro ao carregar vídeo');
                 }}
               />
