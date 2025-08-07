@@ -207,7 +207,8 @@ router.post('/upload', authMiddleware, upload.single('video'), async (req, res) 
 
     console.log(`✅ Arquivo enviado para: ${remotePath}`);
 
-    // Construir URL relativa para salvar no banco
+    // Construir caminho relativo para salvar no banco
+    const relativePath = `${userLogin}/${folderName}/${req.file.filename}`;
     console.log(`💾 Salvando no banco com path: ${relativePath}`);
 
     // Nome do vídeo para salvar no banco
@@ -218,7 +219,7 @@ router.post('/upload', authMiddleware, upload.single('video'), async (req, res) 
         codigo_playlist, path_video, video, width, height,
         bitrate, duracao, duracao_segundos, tipo, ordem, tamanho_arquivo
       ) VALUES (0, ?, ?, 1920, 1080, 2500, ?, ?, 'video', 0, ?)`,
-      [remotePath, videoTitle, formatDuration(duracao), duracao, tamanho]
+      [relativePath, videoTitle, formatDuration(duracao), duracao, tamanho]
     );
 
     await db.execute(
@@ -264,14 +265,14 @@ router.post('/upload', authMiddleware, upload.single('video'), async (req, res) 
     }
     
     // Construir URLs corretas
-    const relativePath = `${userLogin}/${folderName}/${finalFileName}`;
-    const mp4Url = `/content/${relativePath}`;
+    const finalRelativePath = `${userLogin}/${folderName}/${finalFileName}`;
+    const mp4Url = finalRelativePath;
     const hlsUrl = `http://${wowzaHost}:1935/vod/_definst_/mp4:${relativePath}/playlist.m3u8`;
 
     res.status(201).json({
       id: result.insertId,
       nome: videoTitle,
-      url: mp4Url, // Usar MP4 como URL principal
+      url: finalRelativePath, // Usar caminho relativo
       hlsUrl: hlsUrl,
       path: finalRemotePath,
       originalFile: remotePath,

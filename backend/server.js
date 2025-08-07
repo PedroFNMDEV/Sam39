@@ -201,6 +201,31 @@
         
         if (!wowzaResponse.ok) {
           console.log(`❌ Erro ao acessar vídeo (${wowzaResponse.status}): ${wowzaUrl}`);
+          
+          // Se falhou com MP4, tentar com arquivo original
+          if (needsConversion && finalFileName !== fileName) {
+            console.log(`🔄 Tentando arquivo original: ${fileName}`);
+            const originalUrl = isStreamFile ? 
+              `http://${wowzaHost}:1935/vod/_definst_/mp4:${userLogin}/${folderName}/${fileName}/playlist.m3u8` :
+              `http://${wowzaUser}:${wowzaPassword}@${wowzaHost}:6980/content/${userLogin}/${folderName}/${fileName}`;
+            
+            const originalResponse = await fetch(originalUrl, {
+              method: req.method,
+              headers: requestHeaders,
+              timeout: 15000
+            });
+            
+            if (originalResponse.ok) {
+              console.log(`✅ Servindo arquivo original: ${originalUrl}`);
+              originalResponse.headers.forEach((value, key) => {
+                if (!res.headersSent) {
+                  res.setHeader(key, value);
+                }
+              });
+              return originalResponse.body.pipe(res);
+            }
+          }
+          
           return res.status(404).json({ 
             error: 'Vídeo não encontrado',
             details: 'O arquivo não foi encontrado no servidor de streaming'
