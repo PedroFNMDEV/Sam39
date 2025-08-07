@@ -9,6 +9,30 @@ router.get('/', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
 
+    // Verificar se a tabela user_settings existe
+    try {
+      await db.execute('DESCRIBE user_settings');
+    } catch (tableError) {
+      // Tabela não existe, criar
+      console.log('Criando tabela user_settings...');
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS user_settings (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          user_id INT NOT NULL,
+          configuracoes_menu JSON,
+          sidebar_collapsed TINYINT(1) DEFAULT 0,
+          notifications_enabled TINYINT(1) DEFAULT 1,
+          auto_refresh TINYINT(1) DEFAULT 1,
+          refresh_interval INT DEFAULT 30,
+          language VARCHAR(10) DEFAULT 'pt-BR',
+          timezone VARCHAR(50) DEFAULT 'America/Sao_Paulo',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          UNIQUE KEY unique_user (user_id)
+        )
+      `);
+    }
+
     // Buscar configurações personalizadas do usuário
     const [rows] = await db.execute(
       `SELECT 
@@ -57,7 +81,7 @@ router.get('/', authMiddleware, async (req, res) => {
     }
   } catch (error) {
     console.error('Erro ao buscar configurações do usuário:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
+    res.status(500).json({ error: 'Erro interno do servidor', details: error.message });
   }
 });
 
@@ -130,7 +154,7 @@ router.post('/', authMiddleware, async (req, res) => {
     res.json({ success: true, message: 'Configurações salvas com sucesso' });
   } catch (error) {
     console.error('Erro ao salvar configurações do usuário:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
+    res.status(500).json({ error: 'Erro interno do servidor', details: error.message });
   }
 });
 

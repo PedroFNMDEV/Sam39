@@ -178,8 +178,8 @@ class VideoSSHManager {
                             `INSERT INTO playlists_videos (
                                 codigo_playlist, path_video, video, width, height,
                                 bitrate, duracao, duracao_segundos, tipo, ordem, tamanho_arquivo,
-                                bitrate_video, formato_original
-                            ) VALUES (0, ?, ?, 1920, 1080, 2500, ?, ?, 'video', 0, ?, ?, ?)`,
+                                bitrate_video, formato_original, bitrate_original
+                            ) VALUES (0, ?, ?, 1920, 1080, 2500, ?, ?, 'video', 0, ?, ?, ?, ?)`,
                             [
                                 video.fullPath,
                                 video.nome,
@@ -187,7 +187,8 @@ class VideoSSHManager {
                                 video.duration,
                                 video.size,
                                 video.bitrate_video || 0,
-                                video.formato_original || 'unknown'
+                                video.formato_original || 'unknown',
+                                video.bitrate_original || 0
                             ]
                         );
                         

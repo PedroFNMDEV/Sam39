@@ -397,9 +397,10 @@ router.delete('/:id', authMiddleware, async (req, res) => {
     // Atualizar espaço usado baseado no tamanho real
     if (fileSize > 0) {
       const spaceMB = Math.ceil(fileSize / (1024 * 1024));
-      await db.execute(
-        'UPDATE streamings SET espaco_usado = GREATEST(espaco_usado - ?, 0) WHERE codigo_cliente = ?',
-        [spaceMB, userId]
+          bitrate, duracao, duracao_segundos, tipo, ordem, tamanho_arquivo,
+          bitrate_original, formato_original
+        ) VALUES (0, ?, ?, 1920, 1080, 2500, ?, ?, 'video', 0, ?, ?, ?)`,
+        [relativePath, videoTitle, formatDuration(duracao), duracao, tamanho, 0, fileExtension.substring(1)]
       );
       console.log(`📊 Espaço liberado: ${spaceMB}MB`);
     }

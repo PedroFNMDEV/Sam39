@@ -90,14 +90,17 @@ const UniversalVideoPlayer: React.FC<UniversalVideoPlayerProps> = ({
       return src;
     }
 
-    // Para vídeos SSH, usar a URL diretamente (não adicionar /content)
+    // Para vídeos SSH, usar a URL diretamente com token
     if (src.includes('/api/videos-ssh/')) {
-      return src;
+      const token = localStorage.getItem('auth_token');
+      return token ? `${src}${src.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : src;
     }
 
     // Para vídeos locais, sempre usar o proxy /content do backend
     const cleanPath = src.replace(/^\/+/, ''); // Remove barras iniciais
-    return `/content/${cleanPath}`;
+    const token = localStorage.getItem('auth_token');
+    const baseUrl = `/content/${cleanPath}`;
+    return token ? `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}auth_token=${encodeURIComponent(token)}` : baseUrl;
   };
 
   // Função para otimizar URL de vídeo SSH
