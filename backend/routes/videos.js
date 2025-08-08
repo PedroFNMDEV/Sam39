@@ -85,7 +85,11 @@ router.get('/', authMiddleware, async (req, res) => {
         video as nome,
         path_video as url,
         duracao_segundos as duracao,
-        tamanho_arquivo as tamanho
+        tamanho_arquivo as tamanho,
+        bitrate_video,
+        bitrate_original,
+        formato_original,
+        status_conversao
        FROM playlists_videos 
        WHERE path_video LIKE ?
        ORDER BY codigo`,
@@ -109,12 +113,22 @@ router.get('/', authMiddleware, async (req, res) => {
       
       console.log(`🎥 Vídeo: ${video.nome} -> URL: ${url}`);
       
+      // Determinar se precisa de conversão
+      const isMP4 = video.formato_original === 'mp4' || video.nome.toLowerCase().endsWith('.mp4');
+      const needsConversion = !isMP4 || video.status_conversao === 'pendente';
+      
       return {
         id: video.id,
         nome: video.nome,
         url,
         duracao: video.duracao,
         tamanho: video.tamanho,
+        bitrate_video: video.bitrate_video || 0,
+        bitrate_original: video.bitrate_original || 0,
+        formato_original: video.formato_original || 'unknown',
+        status_conversao: video.status_conversao,
+        needs_conversion: needsConversion,
+        is_mp4: isMP4,
         folder: folderName,
         user: userLogin
       };
@@ -207,6 +221,36 @@ router.post('/upload', authMiddleware, upload.single('video'), async (req, res) 
 
     console.log(`✅ Arquivo enviado para: ${remotePath}`);
 
+    // Obter informações do vídeo usando ffprobe
+    let videoBitrate = 0;
+    let videoDuration = duracao;
+    let videoWidth = 1920;
+    let videoHeight = 1080;
+    
+    try {
+      const probeCommand = `ffprobe -v quiet -print_format json -show_format -show_streams "${remotePath}" 2>/dev/null || echo "NO_PROBE"`;
+      const probeResult = await SSHManager.executeCommand(serverId, probeCommand);
+      
+      if (!probeResult.stdout.includes('NO_PROBE')) {
+        const probeData = JSON.parse(probeResult.stdout);
+        
+        if (probeData.format) {
+          videoDuration = Math.floor(parseFloat(probeData.format.duration) || duracao);
+          videoBitrate = Math.floor(parseInt(probeData.format.bit_rate) / 1000) || 0;
+        }
+        
+        if (probeData.streams) {
+          const videoStream = probeData.streams.find(s => s.codec_type === 'video');
+          if (videoStream) {
+            videoWidth = videoStream.width || 1920;
+            videoHeight = videoStream.height || 1080;
+          }
+        }
+      }
+    } catch (probeError) {
+      console.warn('Erro ao obter informações do vídeo:', probeError.message);
+    }
+
     // Construir caminho relativo para salvar no banco
     const relativePath = `${userLogin}/${folderName}/${req.file.filename}`;
     console.log(`💾 Salvando no banco com path: ${relativePath}`);
@@ -214,12 +258,22 @@ router.post('/upload', authMiddleware, upload.single('video'), async (req, res) 
     // Nome do vídeo para salvar no banco
     const videoTitle = req.file.originalname;
 
+    // Determinar se precisa de conversão
+    const isMP4 = fileExtension === '.mp4';
+    const needsConversion = !isMP4;
+    const conversionStatus = needsConversion ? 'pendente' : null;
+
     const [result] = await db.execute(
       `INSERT INTO playlists_videos (
         codigo_playlist, path_video, video, width, height,
-        bitrate, duracao, duracao_segundos, tipo, ordem, tamanho_arquivo
-      ) VALUES (0, ?, ?, 1920, 1080, 2500, ?, ?, 'video', 0, ?)`,
-      [relativePath, videoTitle, formatDuration(duracao), duracao, tamanho]
+        bitrate, duracao, duracao_segundos, tipo, ordem, tamanho_arquivo,
+        bitrate_video, bitrate_original, formato_original, status_conversao
+      ) VALUES (0, ?, ?, ?, ?, 2500, ?, ?, 'video', 0, ?, ?, ?, ?, ?)`,
+      [
+        relativePath, videoTitle, videoWidth, videoHeight, 
+        formatDuration(videoDuration), videoDuration, tamanho,
+        videoBitrate, videoBitrate, fileExtension.substring(1), conversionStatus
+      ]
     );
 
     await db.execute(
@@ -229,56 +283,21 @@ router.post('/upload', authMiddleware, upload.single('video'), async (req, res) 
 
     console.log(`✅ Vídeo salvo no banco com ID: ${result.insertId}`);
 
-    // Construir URLs do Wowza para resposta
-    const isProduction = process.env.NODE_ENV === 'production';
-    const wowzaHost = isProduction ? 'samhost.wcore.com.br' : '51.222.156.223';
-    
-    // Verificar se precisa converter para MP4
-    const needsConversion = !['.mp4'].includes(fileExtension);
-    
-    let finalFileName = req.file.filename;
-    let finalRemotePath = remotePath;
-    
-    // Se precisa converter, fazer conversão para MP4
-    if (needsConversion) {
-      const mp4FileName = req.file.filename.replace(/\.[^/.]+$/, '.mp4');
-      const mp4RemotePath = `/usr/local/WowzaStreamingEngine/content/${userLogin}/${folderName}/${mp4FileName}`;
-      
-      console.log(`🔄 Convertendo ${req.file.filename} para MP4...`);
-      
-      // Comando FFmpeg para conversão
-      const ffmpegCommand = `ffmpeg -i "${remotePath}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -movflags +faststart "${mp4RemotePath}" -y 2>/dev/null && echo "CONVERSION_SUCCESS" || echo "CONVERSION_ERROR"`;
-      
-      try {
-        const conversionResult = await SSHManager.executeCommand(serverId, ffmpegCommand);
-        
-        if (conversionResult.stdout.includes('CONVERSION_SUCCESS')) {
-          console.log(`✅ Conversão concluída: ${mp4FileName}`);
-          finalFileName = mp4FileName;
-          finalRemotePath = mp4RemotePath;
-        } else {
-          console.warn(`⚠️ Conversão falhou, usando arquivo original: ${req.file.filename}`);
-        }
-      } catch (conversionError) {
-        console.warn('Erro na conversão, usando arquivo original:', conversionError.message);
-      }
-    }
-    
-    // Construir URLs corretas
-    const finalRelativePath = `${userLogin}/${folderName}/${finalFileName}`;
-    const mp4Url = finalRelativePath;
-    const hlsUrl = `http://${wowzaHost}:1935/vod/_definst_/mp4:${relativePath}/playlist.m3u8`;
 
     res.status(201).json({
       id: result.insertId,
       nome: videoTitle,
-      url: finalRelativePath, // Usar caminho relativo
-      hlsUrl: hlsUrl,
-      path: finalRemotePath,
-      originalFile: remotePath,
-      converted: needsConversion,
+      url: relativePath,
+      path: remotePath,
+      bitrate_original: videoBitrate,
+      formato_original: fileExtension.substring(1),
+      needs_conversion: needsConversion,
+      status_conversao: conversionStatus,
       duracao,
-      tamanho
+      tamanho,
+      message: needsConversion ? 
+        `Vídeo enviado! ⚠️ Este vídeo precisa ser convertido para MP4 antes de ser usado.` :
+        `Vídeo MP4 enviado e pronto para uso!`
     });
   } catch (err) {
     console.error('Erro no upload:', err);

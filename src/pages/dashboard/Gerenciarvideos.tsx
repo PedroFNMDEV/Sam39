@@ -15,6 +15,12 @@ interface Video {
   url: string;
   duracao?: number;
   tamanho?: number;
+  bitrate_video?: number;
+  bitrate_original?: number;
+  formato_original?: string;
+  status_conversao?: string;
+  needs_conversion?: boolean;
+  is_mp4?: boolean;
   folder?: string;
   user?: string;
 }
@@ -551,7 +557,249 @@ const GerenciarVideos: React.FC = () => {
                                       </div>
                                     ) : (
                                       <>
-                                        <h4 className="font-medium text-gray-900 truncate" title={video.nome}>
+                                        <div className="flex items-center space-x-2">
+                                          <h4 className={`font-medium truncate ${
+                                            video.needs_conversion ? 'text-red-600' : 'text-gray-900'
+                                          }`} title={video.nome}>
+                                            {video.nome}
+                                          </h4>
+                                          {video.needs_conversion && (
+                                            <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">
+                                              CONVERSÃO NECESSÁRIA
+                                            </span>
+                                          )}
+                                          {video.is_mp4 && !video.needs_conversion && (
+                                            <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-medium">
+                                              MP4 PRONTO
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
+                                          {video.duracao && (
+                                            <span>⏱️ {formatDuration(video.duracao)}</span>
+                                          )}
+                                          {video.tamanho && (
+                                            <span>💾 {formatFileSize(video.tamanho)}</span>
+                                          )}
+                                          {(video.bitrate_original || video.bitrate_video) && (
+                                            <span className={`📊 ${video.bitrate_original || video.bitrate_video} kbps ${
+                                              (video.bitrate_original || video.bitrate_video) > (user?.bitrate || 2500) ? 'text-red-600 font-medium' : ''
+                                            }`}>
+                                              📊 {video.bitrate_original || video.bitrate_video} kbps
+                                            </span>
+                                          )}
+                                          {video.formato_original && (
+                                            <span className={`text-xs px-2 py-1 rounded ${
+                                              video.formato_original === 'mp4' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                            }`}>
+                                              {video.formato_original.toUpperCase()}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {video.needs_conversion && (
+                                          <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-md">
+                                            <p className="text-red-800 text-xs">
+                                              ⚠️ Este vídeo precisa ser convertido para MP4 antes de ser usado em transmissões.
+                                              Vá para "Conversão de Vídeos" para converter.
+                                            </p>
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Ações do vídeo */}
+                                {editingVideo?.id !== video.id && (
+                                  <div className="flex items-center space-x-1">
+                                    <button
+                                      onClick={() => openVideoPlayer(video)}
+                                      disabled={video.needs_conversion}
+                                      className={`p-2 rounded-md transition-colors ${
+                                        video.needs_conversion 
+                                          ? 'text-gray-400 cursor-not-allowed' 
+                                          : 'text-primary-600 hover:text-primary-800 hover:bg-primary-50'
+                                      }`}
+                                      title={video.needs_conversion ? "Converta para MP4 primeiro" : "Reproduzir no player"}
+                                    >
+                                      <Play className="h-4 w-4" />
+                                    </button>
+                                    
+                                    <button
+                                      onClick={() => openVideoInNewTab(video)}
+                                      disabled={video.needs_conversion}
+                                      className={`p-2 rounded-md transition-colors ${
+                                        video.needs_conversion 
+                                          ? 'text-gray-400 cursor-not-allowed' 
+                                          : 'text-blue-600 hover:text-blue-800 hover:bg-blue-50'
+                                      }`}
+                                      title={video.needs_conversion ? "Converta para MP4 primeiro" : "Visualizar em nova aba"}
+                                    >
+                                      <ExternalLink className="h-4 w-4" />
+                                    </button>
+                                    
+                                    <button
+                                      onClick={() => handleEditVideo(video)}
+                                      className="text-orange-600 hover:text-orange-800 p-2 rounded-md hover:bg-orange-50 transition-colors"
+                                      title="Editar nome"
+                                    >
+                                      <Edit2 className="h-4 w-4" />
+                                    </button>
+                                    
+                                    <button
+                                      onClick={() => openVideoInNewTab(video)}
+                                      disabled={video.needs_conversion}
+                                      className={`p-2 rounded-md transition-colors ${
+                                        video.needs_conversion 
+                                          ? 'text-gray-400 cursor-not-allowed' 
+                                          : 'text-green-600 hover:text-green-800 hover:bg-green-50'
+                                      }`}
+                                      title={video.needs_conversion ? "Converta para MP4 primeiro" : "Download"}
+                                    >
+                                      <Download className="h-4 w-4" />
+                                    </button>
+                                    
+                                    <button
+                                      onClick={() => handleDeleteVideo(video.id, video.nome, folder.id)}
+                                      className="text-red-600 hover:text-red-800 p-2 rounded-md hover:bg-red-50 transition-colors"
+                                      title="Excluir"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Modal de Nova Pasta */}
+      {showNewFolderModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold">Nova Pasta</h3>
+                <button
+                  onClick={() => setShowNewFolderModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nome da Pasta
+                </label>
+                <input
+                  type="text"
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="Digite o nome da pasta"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleCreateFolder();
+                    }
+                  }}
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowNewFolderModal(false)}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCreateFolder}
+                  disabled={!newFolderName.trim()}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50"
+                >
+                  Criar Pasta
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal do Player Simples */}
+      {showPlayerModal && currentVideo && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              closeVideoPlayer();
+            }
+          }}
+        >
+          <div className="bg-black rounded-lg relative max-w-4xl w-full h-[70vh]">
+            {/* Controles do Modal */}
+            <div className="absolute top-4 right-4 z-20 flex items-center space-x-2">
+              <button
+                onClick={closeVideoPlayer}
+                className="text-white bg-red-600 hover:bg-red-700 rounded-full p-3 transition-colors duration-200 shadow-lg"
+                title="Fechar player"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Título do Vídeo */}
+            <div className="absolute top-4 left-4 z-20 bg-black bg-opacity-60 text-white px-4 py-2 rounded-lg">
+              <h3 className="font-medium">{currentVideo.nome}</h3>
+              <p className="text-xs opacity-80">
+                {currentVideo.duracao ? formatDuration(currentVideo.duracao) : ''} • 
+                {currentVideo.tamanho ? formatFileSize(currentVideo.tamanho) : ''}
+              </p>
+            </div>
+
+            {/* Player HTML5 Simples */}
+            <div className="w-full h-full p-4 pt-16">
+              <video
+                src={buildVideoUrl(currentVideo.url)}
+                className="w-full h-full object-contain"
+                controls
+                autoPlay
+                preload="metadata"
+                onError={(e) => {
+                  console.error('Erro no player:', e);
+                  toast.error('Erro ao carregar vídeo. Tente abrir em nova aba.');
+                }}
+              >
+                <source src={buildVideoUrl(currentVideo.url)} type="video/mp4" />
+                <source src={buildVideoUrl(currentVideo.url)} type="application/vnd.apple.mpegurl" />
+                Seu navegador não suporta reprodução de vídeo.
+              </video>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Informações de Ajuda */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+        <div className="flex items-start">
+          <AlertCircle className="h-5 w-5 text-blue-600 mr-3 mt-0.5" />
+          <div>
+            <h3 className="text-blue-900 font-medium mb-2">Como usar</h3>
+            <ul className="text-blue-800 text-sm space-y-1">
+              <li>• Clique na seta ao lado da pasta para expandir e ver os vídeos</li>
+              <li>• Use os botões de ação para reproduzir, editar, visualizar ou excluir vídeos</li>
+              <li>• Envie vídeos nos formatos: MP4, AVI, MOV, WMV, FLV, WebM, MKV, etc.</li>
                                           {video.nome}
                                         </h4>
                                         <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
@@ -746,7 +994,9 @@ const GerenciarVideos: React.FC = () => {
               <li>• Clique na seta ao lado da pasta para expandir e ver os vídeos</li>
               <li>• Use os botões de ação para reproduzir, editar, visualizar ou excluir vídeos</li>
               <li>• Envie vídeos nos formatos: MP4, AVI, MOV, WMV, FLV, WebM, MKV, etc.</li>
-              <li>• Vídeos são automaticamente convertidos para MP4 se necessário</li>
+              <li>• <strong>NOVO:</strong> Vídeos não-MP4 ficam em vermelho até serem convertidos</li>
+              <li>• <strong>NOVO:</strong> Use "Conversão de Vídeos" para converter formatos não-MP4</li>
+              <li>• <strong>NOVO:</strong> Bitrate de cada vídeo é exibido nas informações</li>
               <li>• Use "Sincronizar" para atualizar a lista com vídeos enviados via FTP</li>
               <li>• Monitore o uso de espaço para não exceder seu plano</li>
             </ul>

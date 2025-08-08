@@ -138,15 +138,16 @@ const ConversaoVideos: React.FC = () => {
           setVideos(data.videos);
         }
       }
+       LIMIT 100`,
     } catch (error) {
       console.error('Erro ao carregar vídeos:', error);
       toast.error('Erro ao carregar vídeos');
-    } finally {
+    // Processar vídeos para mostrar opções de conversão
       setLoading(false);
     }
   };
 
-  const openConversionModal = (video: VideoConversion) => {
+      const currentBitrate = video.bitrate_original || video.bitrate_video || 0;
     setSelectedVideo(video);
     
     // Definir qualidade padrão baseada no bitrate atual
@@ -175,10 +176,11 @@ const ConversaoVideos: React.FC = () => {
       const token = await getToken();
       const requestBody = conversionSettings.use_custom ? {
         video_id: selectedVideo.id,
+        bitrate_original: video.bitrate_original || currentBitrate,
         custom_bitrate: conversionSettings.custom_bitrate,
         custom_resolution: conversionSettings.custom_resolution
       } : {
-        video_id: selectedVideo.id,
+        needs_conversion: !isMP4 || video.status_conversao === 'pendente' || currentBitrate > userBitrateLimit,
         quality: conversionSettings.quality
       };
 
@@ -560,13 +562,18 @@ const ConversaoVideos: React.FC = () => {
                     <td className="py-3 px-4 text-center">
                       <div className="flex flex-col items-center">
                         <span className={`font-medium ${
-                          (video.bitrate_original || video.current_bitrate) > video.user_bitrate_limit ? 'text-red-600' : 'text-gray-900'
+                          video.bitrate_original > video.user_bitrate_limit ? 'text-red-600' : 'text-gray-900'
                         }`}>
-                          {video.bitrate_original || video.current_bitrate || 'N/A'} kbps
+                          {video.bitrate_original || 'N/A'} kbps
                         </span>
-                        {(video.bitrate_original || video.current_bitrate) > video.user_bitrate_limit && (
+                        {video.bitrate_original > video.user_bitrate_limit && (
                           <span className="text-xs text-red-600">
                             Limite: {video.user_bitrate_limit} kbps
+                          </span>
+                        )}
+                        {video.bitrate_original === 0 && (
+                          <span className="text-xs text-gray-500">
+                            Não detectado
                           </span>
                         )}
                       </div>
@@ -654,9 +661,14 @@ const ConversaoVideos: React.FC = () => {
                   <div>
                     <span className="text-gray-600">Bitrate:</span>
                     <span className={`ml-2 font-medium ${
-                      selectedVideo.current_bitrate > selectedVideo.user_bitrate_limit ? 'text-red-600' : 'text-gray-900'
+                      selectedVideo.bitrate_original > selectedVideo.user_bitrate_limit ? 'text-red-600' : 'text-gray-900'
                     }`}>
-                      {selectedVideo.current_bitrate || 'N/A'} kbps
+                      {selectedVideo.bitrate_original || 'N/A'} kbps
+                      {selectedVideo.bitrate_original > selectedVideo.user_bitrate_limit && (
+                        <span className="text-xs text-red-600 block">
+                          (Excede limite: {selectedVideo.user_bitrate_limit} kbps)
+                        </span>
+                      )}
                     </span>
                   </div>
                   <div>
